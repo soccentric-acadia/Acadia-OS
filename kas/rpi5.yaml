@@ -32,6 +32,11 @@ repos:
     commit: 2c646d29912dcc873469a57b1c207e1549c5094d
     path: layers/meta-raspberrypi
 
+  meta-swupdate:
+    url: https://github.com/sbabic/meta-swupdate
+    branch: scarthgap
+    path: layers/meta-swupdate
+
   meta-custom:
     path: meta/meta-custom
     layers:
@@ -43,7 +48,7 @@ local_conf_header:
     INIT_MANAGER = "systemd"
 
     # SD card image output
-    IMAGE_FSTYPES = "wic.bz2 wic.bmap"
+    IMAGE_FSTYPES = "wic.bz2 wic.bmap ext4"
     WKS_FILE      = "sdimage-rpi5.wks"
 
     # Raspberry Pi settings
@@ -56,4 +61,7 @@ local_conf_header:
     # Shared caches (bind-mounted by Docker)
     DL_DIR     ?= "${TOPDIR}/../downloads"
     SSTATE_DIR ?= "${TOPDIR}/../sstate-cache"
+
+    # SWUpdate: enable built-in Mongoose web server and progress IPC
+    PACKAGECONFIG:append:pn-swupdate = " webserver"
 

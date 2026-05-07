@@ -1,5 +1,6 @@
 # --- Configuration -----------------------------------------------------------
 KAS_IMAGE        ?= rpi5-kas:latest
+SWU_VERSION      ?= $(shell date +%Y%m%d%H%M)
 KAS_CONFIG       := kas/rpi5.yaml
 MACHINE          := raspberrypi5
 
@@ -23,7 +24,7 @@ KAS_ENV = \
 KAS_RUN = $(KAS_ENV) $(KAS_CONTAINER)
 
 # --- Targets -----------------------------------------------------------------
-.PHONY: all build rebuild-image image kas-container-script shell flash sdk esdk clean clean-all help
+.PHONY: all build rebuild-image image kas-container-script shell flash sdk esdk swu clean clean-all help
 
 all: build
 
@@ -63,6 +64,26 @@ sdk: image kas-container-script
 esdk: image kas-container-script
 	$(KAS_RUN) shell $(KAS_CONFIG) -- bitbake -c populate_sdk_ext core-image-full-cmdline
 
+## Build a .swu OTA update package from the latest rootfs.ext4 image
+## Usage: make swu   or   make swu SWU_VERSION=1.2.3
+swu: build
+	$(eval ROOTFS := $(shell find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \
+	    -name "core-image-full-cmdline-$(MACHINE)*.rootfs.ext4" 2>/dev/null | sort -V | tail -1))
+	@test -n "$(ROOTFS)" || \
+	    { echo "ERROR: No .rootfs.ext4 found. Ensure 'ext4' is in IMAGE_FSTYPES."; exit 1; }
+	@echo "Packaging OTA update from: $(ROOTFS)"
+	@mkdir -p $(BUILD_DIR)/swu
+	@gzip -kfc "$(ROOTFS)" > "$(BUILD_DIR)/swu/rootfs.ext4.gz"
+	@sed "s|@@VERSION@@|$(SWU_VERSION)|" \
+	    meta/meta-custom/swupdate/sw-description \
+	    > "$(BUILD_DIR)/swu/sw-description"
+	@cp meta/meta-custom/swupdate/pre-install.sh  "$(BUILD_DIR)/swu/"
+	@cp meta/meta-custom/swupdate/post-install.sh "$(BUILD_DIR)/swu/"
+	@cd "$(BUILD_DIR)/swu" && \
+	    printf 'sw-description\npre-install.sh\npost-install.sh\nrootfs.ext4.gz\n' | \
+	    cpio -ov -H newc > "$(BUILD_DIR)/rpi5-$(SWU_VERSION).swu"
+	@echo "OTA package: $(BUILD_DIR)/rpi5-$(SWU_VERSION).swu"
+
 ## Flash to SD card.  Usage: make flash DEVICE=/dev/sdX
 flash:
 ifndef DEVICE
@@ -91,6 +112,7 @@ help:
 	@printf "  %-16s %s\n" "sdk"            "Build standard SDK (cross-toolchain + sysroot)"
 	@printf "  %-16s %s\n" "esdk"           "Build extensible SDK (devtool + layer checkout)"
 	@printf "  %-16s %s\n" "flash"          "Flash SD card  -- requires DEVICE=/dev/sdX"
+	@printf "  %-16s %s\n" "swu"            "Build .swu OTA package  [SWU_VERSION=YYYYMMDDHHMM]"
 	@printf "  %-16s %s\n" "clean"      "Remove build/"
 	@printf "  %-16s %s\n" "clean-all"  "Remove build/, downloads/, sstate-cache/"
 	@printf "\nVariables:\n"

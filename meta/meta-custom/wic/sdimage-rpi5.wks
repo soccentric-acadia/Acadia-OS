@@ -1,11 +1,18 @@
-# Raspberry Pi 5 SD card image layout
+# Raspberry Pi 5 SD card image — A/B OTA layout
 #
-# Boot partition : 256 MB  FAT32  (kernel, DTBs, overlays, config.txt)
-# Root partition : ext4 sized exactly to rootfs content.
+# p1  /boot      256 MB  FAT32  kernel, DTBs, config.txt, cmdline.txt
+# p2  /          3072 MB ext4   rootfs-a  (active slot, populated at build time)
+# p3  <none>     3072 MB ext4   rootfs-b  (standby slot, written by SWUpdate)
+# p4  /data      1024 MB ext4   persistent data (survives OTA updates)
 #
-# On first boot the expand-rootfs service grows the root partition and
-# filesystem to fill the entire SD card so no space is wasted.
+# SWUpdate writes the new rootfs to the inactive slot (p2 or p3) and
+# updates /boot/cmdline.txt to point root= at the new PARTUUID.
+# On the next reboot the updated slot becomes active.
 
 part /boot --source bootimg-partition --ondisk mmcblk0 --fstype=vfat --label boot --active --align 4096 --fixed-size 256M
 
-part / --source rootfs --ondisk mmcblk0 --fstype=ext4 --label root --align 4096 --extra-space 0 --overhead-factor 1.0
+part / --source rootfs --ondisk mmcblk0 --fstype=ext4 --label rootfs-a --align 4096 --fixed-size 3072M
+
+part --source empty --ondisk mmcblk0 --fstype=ext4 --label rootfs-b --align 4096 --fixed-size 3072M
+
+part /data --source empty --ondisk mmcblk0 --fstype=ext4 --label data --align 4096 --fixed-size 1024M

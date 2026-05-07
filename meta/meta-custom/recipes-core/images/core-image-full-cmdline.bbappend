@@ -1,5 +1,9 @@
-# Pull expand-rootfs into every image built from core-image-base.
-IMAGE_INSTALL:append = " expand-rootfs"
+# OTA via SWUpdate — A/B rootfs slot switching, web UI on :8080
+IMAGE_INSTALL:append = " \
+    swupdate \
+    swupdate-www \
+    rpi5-swupdate-config \
+"
 
 # Connectivity — Ethernet DHCP, WiFi (wpa_supplicant), Bluetooth
 # linux-firmware-rpidistro is pulled in by meta-raspberrypi MACHINE_EXTRA_RRECOMMENDS
