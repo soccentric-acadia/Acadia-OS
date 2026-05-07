@@ -6,8 +6,6 @@
 # On first boot the expand-rootfs service grows the root partition and
 # filesystem to fill the entire SD card so no space is wasted.
 
-part /boot --source bootimg-partition --ondisk mmcblk0 --fstype=vfat \
-           --label boot --active --align 4096 --fixed-size 256M
+part /boot --source bootimg-partition --ondisk mmcblk0 --fstype=vfat --label boot --active --align 4096 --fixed-size 256M
 
-part /     --source rootfs           --ondisk mmcblk0 --fstype=ext4 \
-           --label root  --align 4096 --extra-space 0 --overhead-factor 1.0
+part / --source rootfs --ondisk mmcblk0 --fstype=ext4 --label root --align 4096 --extra-space 0 --overhead-factor 1.0

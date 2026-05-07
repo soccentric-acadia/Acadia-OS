@@ -23,7 +23,7 @@ KAS_ENV = \
 KAS_RUN = $(KAS_ENV) $(KAS_CONTAINER)
 
 # --- Targets -----------------------------------------------------------------
-.PHONY: all build rebuild-image image kas-container-script shell flash clean clean-all help
+.PHONY: all build rebuild-image image kas-container-script shell flash sdk esdk clean clean-all help
 
 all: build
 
@@ -55,6 +55,14 @@ rebuild-image: image kas-container-script
 shell: image kas-container-script
 	$(KAS_RUN) shell $(KAS_CONFIG)
 
+## Build the standard SDK (cross-toolchain + sysroot installer)
+sdk: image kas-container-script
+	$(KAS_RUN) shell $(KAS_CONFIG) -- bitbake -c populate_sdk core-image-full-cmdline
+
+## Build the extensible SDK (eSDK — includes devtool and full layer checkout)
+esdk: image kas-container-script
+	$(KAS_RUN) shell $(KAS_CONFIG) -- bitbake -c populate_sdk_ext core-image-full-cmdline
+
 ## Flash to SD card.  Usage: make flash DEVICE=/dev/sdX
 flash:
 ifndef DEVICE
@@ -79,8 +87,10 @@ help:
 	@printf "  %-16s %s\n" "build"          "Build Docker image + Yocto image (default)"
 	@printf "  %-16s %s\n" "rebuild-image"  "cleansstate image recipe then rebuild (after adding packages)"
 	@printf "  %-16s %s\n" "image"          "Build the KAS Docker image only"
-	@printf "  %-16s %s\n" "shell"      "Interactive kas shell in the build container"
-	@printf "  %-16s %s\n" "flash"      "Flash SD card  -- requires DEVICE=/dev/sdX"
+	@printf "  %-16s %s\n" "shell"          "Interactive kas shell in the build container"
+	@printf "  %-16s %s\n" "sdk"            "Build standard SDK (cross-toolchain + sysroot)"
+	@printf "  %-16s %s\n" "esdk"           "Build extensible SDK (devtool + layer checkout)"
+	@printf "  %-16s %s\n" "flash"          "Flash SD card  -- requires DEVICE=/dev/sdX"
 	@printf "  %-16s %s\n" "clean"      "Remove build/"
 	@printf "  %-16s %s\n" "clean-all"  "Remove build/, downloads/, sstate-cache/"
 	@printf "\nVariables:\n"
