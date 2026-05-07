@@ -5,6 +5,10 @@ IMAGE_INSTALL:append = " \
     rpi5-swupdate-config \
 "
 
+# Persistent /home partition init — creates /home/rpi on first boot after
+# the empty ext4 home partition (p4) is mounted over /home.
+IMAGE_INSTALL:append = " rpi5-home-init"
+
 # Connectivity — Ethernet DHCP, WiFi (wpa_supplicant), Bluetooth
 # linux-firmware-rpidistro is pulled in by meta-raspberrypi MACHINE_EXTRA_RRECOMMENDS
 # but we declare the tools explicitly for clarity.
