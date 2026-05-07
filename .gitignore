@@ -1,0 +1,47 @@
+# ─── Yocto build output ───────────────────────────────────────────────────────
+build/
+downloads/
+sstate-cache/
+
+# ─── KAS artefacts ────────────────────────────────────────────────────────────
+.kas-cache/
+kas-container
+
+# ─── Yocto / BitBake generated files ─────────────────────────────────────────
+# Cloned upstream layers (managed by KAS, never edited by hand)
+layers/
+
+# BitBake lock and pseudo database
+bitbake.lock
+pseudodone
+
+# SDK installers
+*.sh
+
+# Compiled Python
+*.pyc
+*.pyo
+__pycache__/
+
+# ─── Docker artefacts ─────────────────────────────────────────────────────────
+*.tar
+*.tar.gz
+
+# ─── SD card images (large) ───────────────────────────────────────────────────
+*.wic
+*.wic.bz2
+*.wic.bmap
+*.img
+*.img.bz2
+
+# ─── Editor / IDE ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
