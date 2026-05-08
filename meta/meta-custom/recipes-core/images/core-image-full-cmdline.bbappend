@@ -32,6 +32,70 @@ IMAGE_INSTALL:append = " \
     sudo \
 "
 
+# --- Hardware interface tools ------------------------------------------------
+
+# I2C
+IMAGE_INSTALL:append = " \
+    i2c-tools \
+    python3-smbus \
+    python3-smbus2 \
+"
+
+# SPI
+IMAGE_INSTALL:append = " \
+    spitools \
+    python3-spidev \
+"
+
+# GPIO
+IMAGE_INSTALL:append = " \
+    libgpiod \
+    libgpiod-tools \
+    python3-gpiod \
+"
+
+# UART / serial
+IMAGE_INSTALL:append = " \
+    picocom \
+    minicom \
+    python3-pyserial \
+"
+
+# USB
+IMAGE_INSTALL:append = " \
+    usbutils \
+"
+
+# PCI / NVMe / SCSI / storage
+IMAGE_INSTALL:append = " \
+    pciutils \
+    nvme-cli \
+    sg3-utils \
+    hdparm \
+    mtd-utils \
+"
+
+# CAN bus
+IMAGE_INSTALL:append = " \
+    can-utils \
+"
+
+# System / hardware inspection
+IMAGE_INSTALL:append = " \
+    lshw \
+    usbutils \
+    ethtool \
+    devmem2 \
+    cpupower \
+    watchdog \
+    sysstat \
+    iotop \
+    strace \
+    v4l-utils \
+    evtest \
+    python3-periphery \
+"
+
 # Add local user 'rpi' with password 'rpi' and sudo access
 inherit extrausers
 

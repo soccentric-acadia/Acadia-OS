@@ -5,6 +5,7 @@ repos:
   poky:
     url: https://git.yoctoproject.org/poky
     branch: scarthgap
+    commit: HEAD  # TODO: pin to a specific commit for reproducible builds
     path: layers/poky
     layers:
       meta:

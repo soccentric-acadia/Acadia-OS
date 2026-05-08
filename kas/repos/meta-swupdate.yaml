@@ -5,4 +5,5 @@ repos:
   meta-swupdate:
     url: https://github.com/sbabic/meta-swupdate
     branch: scarthgap
+    commit: HEAD  # TODO: pin to a specific commit for reproducible builds
     path: layers/meta-swupdate

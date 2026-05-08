@@ -5,6 +5,7 @@ repos:
   meta-openembedded:
     url: https://github.com/openembedded/meta-openembedded
     branch: scarthgap
+    commit: HEAD  # TODO: pin to a specific commit for reproducible builds
     path: layers/meta-openembedded
     layers:
       meta-oe:

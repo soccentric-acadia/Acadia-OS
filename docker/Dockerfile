@@ -1,4 +1,5 @@
-FROM ghcr.io/siemens/kas/kas:latest
+ARG KAS_VERSION=4.5
+FROM ghcr.io/siemens/kas/kas:${KAS_VERSION}
 
 # Install bmap-tools (efficient SD card flashing) and a few extras
 # that may be handy inside the build container.
