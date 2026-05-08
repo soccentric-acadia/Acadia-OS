@@ -1,0 +1,8 @@
+header:
+  version: 14
+
+repos:
+  meta-custom:
+    path: meta/meta-custom
+    layers:
+      .:

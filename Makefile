@@ -1,8 +1,16 @@
 # --- Configuration -----------------------------------------------------------
 KAS_IMAGE        ?= rpi5-kas:latest
 SWU_VERSION      ?= $(shell date +%Y%m%d%H%M)
-KAS_CONFIG       := kas/rpi5.yaml
-MACHINE          := raspberrypi5
+
+# Select target board — must match a file in kas/<BOARD>.yaml
+# Examples: rpi5 rpi4-64 rpi4 rpi3-64 rpi3 rpi2
+#           rpi0-2w-64 rpi0-2w rpi0-wifi rpi0 rpi1
+#           rpi-armv7 rpi-armv8 cm1 cm3 cm5
+BOARD            ?= rpi5
+KAS_CONFIG       := kas/boards/$(BOARD).yaml
+
+# Derive MACHINE automatically from the selected kas yaml
+MACHINE          := $(shell grep '^machine:' $(KAS_CONFIG) 2>/dev/null | awk '{print $$2}')
 
 BUILD_DIR        ?= $(CURDIR)/build
 DL_DIR           ?= $(CURDIR)/downloads
@@ -24,7 +32,7 @@ KAS_ENV = \
 KAS_RUN = $(KAS_ENV) $(KAS_CONTAINER)
 
 # --- Targets -----------------------------------------------------------------
-.PHONY: all build rebuild-image image kas-container-script shell flash sdk esdk swu clean clean-all help
+.PHONY: all build rebuild-image image kas-container-script shell flash sdk esdk swu clean clean-all completion help
 
 all: build
 
@@ -42,7 +50,7 @@ image:
 	    IMAGE_NAME=$(firstword $(subst :, ,$(KAS_IMAGE))) \
 	    IMAGE_TAG=$(lastword  $(subst :, ,$(KAS_IMAGE)))
 
-## Build the RPi5 Yocto image
+## Build the Yocto image for the selected BOARD
 build: image kas-container-script
 	mkdir -p $(BUILD_DIR) $(DL_DIR) $(SSTATE_DIR)
 	$(KAS_RUN) build $(KAS_CONFIG)
@@ -102,6 +110,17 @@ clean:
 clean-all: clean
 	rm -rf $(DL_DIR) $(SSTATE_DIR)
 
+## Install bash tab-completion (sources rpi-make-completion.bash from ~/.bashrc)
+completion:
+	@RCFILE="$$HOME/.bashrc"; \
+	 LINE="source \"$(CURDIR)/rpi-make-completion.bash\""; \
+	 if grep -qF "$$LINE" "$$RCFILE" 2>/dev/null; then \
+	     echo "Completion already enabled in $$RCFILE"; \
+	 else \
+	     printf '\n# rpi Makefile tab-completion\n%s\n' "$$LINE" >> "$$RCFILE"; \
+	     echo "Added to $$RCFILE — run: source $$RCFILE"; \
+	 fi
+
 help:
 	@printf "\nUsage: make [target] [VAR=value ...]\n"
 	@printf "\nTargets:\n"
@@ -115,7 +134,12 @@ help:
 	@printf "  %-16s %s\n" "swu"            "Build .swu OTA package  [SWU_VERSION=YYYYMMDDHHMM]"
 	@printf "  %-16s %s\n" "clean"      "Remove build/"
 	@printf "  %-16s %s\n" "clean-all"  "Remove build/, downloads/, sstate-cache/"
+	@printf "  %-16s %s\n" "completion" "Install bash tab-completion into ~/.bashrc"
 	@printf "\nVariables:\n"
+	@printf "  %-20s %s\n" "BOARD"      "Target board kas config (default: rpi5)"
+	@printf "  %-20s %s\n" ""           "Boards: rpi5 rpi4-64 rpi4 rpi3-64 rpi3 rpi2"
+	@printf "  %-20s %s\n" ""           "        rpi0-2w-64 rpi0-2w rpi0-wifi rpi0 rpi1"
+	@printf "  %-20s %s\n" ""           "        rpi-armv7 rpi-armv8 cm1 cm3 cm5"
 	@printf "  %-20s %s\n" "KAS_IMAGE"  "Docker image  (default: rpi5-kas:latest)"
 	@printf "  %-20s %s\n" "BUILD_DIR"  "Build output  (default: ./build)"
 	@printf "  %-20s %s\n" "DL_DIR"     "Download cache (default: ./downloads)"
