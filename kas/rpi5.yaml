@@ -65,3 +65,6 @@ local_conf_header:
     # SWUpdate: enable built-in Mongoose web server and progress IPC
     PACKAGECONFIG:append:pn-swupdate = " webserver"
 
+    # Required by Poky sanity checks (must match LOCALCONF_VERSION in poky)
+    CONF_VERSION = "2"
+

@@ -49,7 +49,7 @@ build: image kas-container-script
 
 ## Clean sstate for the image recipe then rebuild  (use after adding packages)
 rebuild-image: image kas-container-script
-	$(KAS_RUN) shell $(KAS_CONFIG) -- bitbake -c cleansstate core-image-full-cmdline
+	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -c cleansstate core-image-full-cmdline"
 	$(KAS_RUN) build $(KAS_CONFIG)
 
 ## Interactive shell inside the build container
@@ -58,11 +58,11 @@ shell: image kas-container-script
 
 ## Build the standard SDK (cross-toolchain + sysroot installer)
 sdk: image kas-container-script
-	$(KAS_RUN) shell $(KAS_CONFIG) -- bitbake -c populate_sdk core-image-full-cmdline
+	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -c populate_sdk core-image-full-cmdline"
 
 ## Build the extensible SDK (eSDK — includes devtool and full layer checkout)
 esdk: image kas-container-script
-	$(KAS_RUN) shell $(KAS_CONFIG) -- bitbake -c populate_sdk_ext core-image-full-cmdline
+	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -c populate_sdk_ext core-image-full-cmdline"
 
 ## Build a .swu OTA update package from the latest rootfs.ext4 image
 ## Usage: make swu   or   make swu SWU_VERSION=1.2.3
