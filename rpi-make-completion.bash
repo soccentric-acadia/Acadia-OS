@@ -5,9 +5,19 @@
 #
 # Or add to ~/.bashrc:
 #   source ~/work/rpi/rpi-make-completion.bash
+#
+# Usage:
+#   make image  rpi5        ← board as positional arg
+#   make sdk    rpi4-64
+#   make esdk   rpi3-64
+#   make flash  rpi5 DEVICE=/dev/sdb
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
 
 _rpi_make_boards() {
-    # Derive board names dynamically from kas/*.yaml (excluding base.yaml)
+    # Board names derived dynamically from kas/boards/*.yaml
     local kas_dir
     kas_dir="$(git -C "$(pwd)" rev-parse --show-toplevel 2>/dev/null)/kas"
     [[ -d "$kas_dir" ]] || kas_dir="$(pwd)/kas"
@@ -15,50 +25,42 @@ _rpi_make_boards() {
         -exec basename {} .yaml \; 2>/dev/null | sort
 }
 
+# Targets that accept a board name as the next positional argument
+_rpi_board_targets="image build rebuild-image sdk esdk sdk-image esdk-image shell swu flash"
+
+# ---------------------------------------------------------------------------
+# Main completion function
+# ---------------------------------------------------------------------------
+
 _rpi_make() {
     local cur prev words cword
     _init_completion || return
 
-    local targets="build rebuild-image image shell sdk esdk swu flash clean clean-all help"
-    local vars="BOARD= DEVICE= BUILD_DIR= DL_DIR= SSTATE_DIR= KAS_IMAGE= SWU_VERSION="
+    local targets="
+        image build rebuild-image
+        sdk esdk sdk-image esdk-image
+        kas-image ensure-image ensure-sdk-image ensure-esdk-image
+        shell flash swu
+        deploy-images deploy-sdk deploy-esdk deploy-swu
+        clean clean-build clean-docker clean-all
+        completion help
+    "
 
-    case "$prev" in
-        BOARD)
-            # Complete board names after BOARD=
+    # -----------------------------------------------------------------------
+    # Positional board argument:
+    #   make image <TAB>  →  board names
+    #   make sdk   <TAB>  →  board names
+    # -----------------------------------------------------------------------
+    if [[ $cword -eq 2 ]]; then
+        local first_target="${words[1]}"
+        if [[ " $_rpi_board_targets " == *" $first_target "* ]]; then
             COMPREPLY=( $(compgen -W "$(_rpi_make_boards)" -- "$cur") )
-            return ;;
-        DEVICE)
-            # Complete block devices for flashing
-            COMPREPLY=( $(compgen -W "$(ls /dev/sd? /dev/mmcblk? 2>/dev/null)" -- "$cur") )
-            return ;;
-        BUILD_DIR|DL_DIR|SSTATE_DIR)
-            _filedir -d
-            return ;;
-        KAS_IMAGE)
-            # Complete from available local Docker images
-            local images
-            images=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)
-            COMPREPLY=( $(compgen -W "$images" -- "$cur") )
-            return ;;
-    esac
-
-    # Handle VAR=value completions mid-word (e.g. "BOARD=rpi<TAB>")
-    if [[ "$cur" == BOARD=* ]]; then
-        local boards val_prefix="BOARD="
-        boards=$(_rpi_make_boards)
-        COMPREPLY=( $(compgen -W "$boards" -- "${cur#BOARD=}") )
-        COMPREPLY=( "${COMPREPLY[@]/#/$val_prefix}" )
-        return
+            return
+        fi
     fi
 
-    if [[ "$cur" == DEVICE=* ]]; then
-        local devs val_prefix="DEVICE="
-        devs=$(ls /dev/sd? /dev/mmcblk? 2>/dev/null)
-        COMPREPLY=( $(compgen -W "$devs" -- "${cur#DEVICE=}") )
-        COMPREPLY=( "${COMPREPLY[@]/#/$val_prefix}" )
-        return
-    fi
-
-    # Default: complete targets and variable names
-    COMPREPLY=( $(compgen -W "$targets $vars" -- "$cur") )
+    # -----------------------------------------------------------------------
+    # Default: complete target names only
+    # -----------------------------------------------------------------------
+    COMPREPLY=( $(compgen -W "$targets" -- "$cur") )
 } && complete -F _rpi_make make

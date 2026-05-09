@@ -9,7 +9,7 @@ Key features:
 - **gRPC + Protobuf** (C++ runtime, compiler, and Python bindings) pre-installed
 - **Persistent `/home` partition** that survives OTA updates
 - **Standard and extensible SDK** generation for cross-compilation
-- **Bash tab-completion** for all `make` targets and `BOARD=` values
+- **Bash tab-completion** for all `make` targets and board names
 
 ---
 
@@ -25,10 +25,11 @@ Key features:
 8. [Partition Layout (RPi 5 / CM5)](#partition-layout-rpi-5--cm5)
 9. [OTA Updates with SWUpdate](#ota-updates-with-swupdate)
 10. [SDK / Cross-Compilation](#sdk--cross-compilation)
-11. [First-Boot Services](#first-boot-services)
-12. [Customising the Image](#customising-the-image)
-13. [Bash Tab-Completion](#bash-tab-completion)
-14. [Tips & Troubleshooting](#tips--troubleshooting)
+11. [SDK Docker Images](#sdk-docker-images)
+12. [First-Boot Services](#first-boot-services)
+13. [Customising the Image](#customising-the-image)
+14. [Bash Tab-Completion](#bash-tab-completion)
+15. [Tips & Troubleshooting](#tips--troubleshooting)
 
 ---
 
@@ -55,10 +56,10 @@ git clone <this-repo> rpi && cd rpi
 make completion && source ~/.bashrc
 
 # 3. Build for Raspberry Pi 5 (default)
-make build
+make image rpi5
 
 # 4. Flash to SD card
-make flash DEVICE=/dev/sdX
+make flash rpi5 DEVICE=/dev/sdX
 ```
 
 The first build downloads all sources and populates the sstate cache — this takes a while. Subsequent builds for the same or a different board reuse the shared cache and are much faster.
@@ -67,9 +68,18 @@ The first build downloads all sources and populates the sstate cache — this ta
 
 ## Supported Boards
 
-Pass `BOARD=<name>` to any `make` target to select a board. The default is `rpi5`.
+Pass the board name directly after the target. The default is `rpi5`.
 
-| `BOARD=` | Yocto `MACHINE` | SoC / Notes |
+```bash
+make image  rpi5       # build SD card image for RPi 5
+make image  rpi4-64    # build for RPi 4 (64-bit)
+make sdk    rpi5       # build cross-toolchain SDK for RPi 5
+make esdk   rpi3-64    # build eSDK for RPi 3 (64-bit)
+make shell  cm5        # open build shell for CM5
+make flash  rpi5 DEVICE=/dev/sdb
+```
+
+| Board | Yocto `MACHINE` | SoC / Notes |
 |----------|-----------------|-------------|
 | `rpi5` *(default)* | `raspberrypi5` | BCM2712, Cortex-A76 64-bit, A/B OTA |
 | `cm5` | `raspberrypi-cm5-io-board` | CM5 on IO Board, same SoC as RPi 5 |
@@ -91,10 +101,10 @@ Pass `BOARD=<name>` to any `make` target to select a board. The default is `rpi5
 **Examples:**
 
 ```bash
-make build  BOARD=rpi4-64
-make flash  BOARD=rpi4-64  DEVICE=/dev/mmcblk0
-make sdk    BOARD=rpi3-64
-make shell  BOARD=cm5
+make image  rpi4-64
+make flash  rpi4-64  DEVICE=/dev/mmcblk0
+make sdk    rpi3-64
+make shell  cm5
 ```
 
 ---
@@ -115,8 +125,17 @@ rpi/
 │   └── ...
 │
 ├── docker/
-│   ├── Dockerfile              # Extends kas:latest with bmap-tools, fdisk, etc.
-│   └── Makefile
+│   ├── yocto/                  # KAS Yocto build container
+│   │   ├── Dockerfile          # Extends kas:latest with bmap-tools, fdisk, etc.
+│   │   └── Makefile
+│   ├── sdk/                    # Standard SDK Docker image
+│   │   ├── Dockerfile          # Ubuntu 22.04 + cross-toolchain SDK pre-installed
+│   │   ├── Makefile
+│   │   └── sdk.sh              # SDK installer (staged by 'make sdk-image')
+│   └── esdk/                   # Extensible SDK Docker image
+│       ├── Dockerfile          # Ubuntu 22.04 + eSDK + devtool pre-installed
+│       ├── Makefile
+│       └── esdk.sh             # eSDK installer (staged by 'make esdk-image')
 │
 ├── meta/
 │   └── meta-custom/            # Project-specific Yocto layer
@@ -150,34 +169,83 @@ rpi/
 
 ## Makefile Reference
 
-### Targets
+### Board Selection
+
+Type the board name directly after the target — no prefix needed:
+
+```bash
+make image  rpi5
+make sdk    rpi4-64
+make esdk   rpi3-64
+make shell  cm5
+make flash  rpi5 DEVICE=/dev/sdb
+```
+
+The default board is `rpi5` when no board is specified.
+
+### Yocto Build Targets
 
 | Target | Description |
 |--------|-------------|
-| `build` *(default)* | Build Docker image + Yocto image for `BOARD` |
-| `rebuild-image` | Clean sstate for `core-image-full-cmdline`, then rebuild |
-| `image` | Build the KAS Docker image only |
-| `shell` | Drop into an interactive kas/BitBake shell inside the container |
-| `sdk` | Build the standard SDK (cross-toolchain + sysroot installer) |
-| `esdk` | Build the extensible SDK (devtool + full layer checkout) |
-| `flash` | Flash the latest `.wic.bz2` to `DEVICE` using bmaptool |
+| `image` | Build Yocto SD card image for `BOARD` — alias for `build` |
+| `build` *(default)* | Ensure KAS container, build Yocto image, deploy to `deploy/images/` |
+| `rebuild-image` | Clean sstate for `IMAGE_TARGET`, then rebuild |
+| `sdk` | Build cross-toolchain SDK installer → `deploy/sdk/` (no Docker image) |
+| `esdk` | Build extensible SDK installer → `deploy/esdk/` (no Docker image) |
+| `shell` | Interactive kas/BitBake shell inside the build container |
 | `swu` | Package a `.swu` OTA bundle from the latest `rootfs.ext4` |
+| `flash` | Flash the latest `.wic.bz2` to `DEVICE` using bmaptool |
+
+### Docker Image Targets
+
+| Target | Description |
+|--------|-------------|
+| `kas-image` | Build/rebuild the KAS Yocto build container (`docker/yocto/`) |
+| `ensure-image` | Build KAS image only if absent (used internally) |
+| `sdk-image` | **Full chain**: `bitbake populate_sdk` → stage installer → `docker build` → deploy |
+| `ensure-sdk-image` | Run `sdk-image` chain only when the image is absent |
+| `esdk-image` | **Full chain**: `bitbake populate_sdk_ext` → stage installer → `docker build` → deploy |
+| `ensure-esdk-image` | Run `esdk-image` chain only when the image is absent |
+
+### Deployment Targets
+
+Called automatically by the build targets above; can also be invoked manually.
+
+| Target | Destination |
+|--------|-------------|
+| `deploy-images` | `deploy/images/BOARD_YYYYMMDD_HHMMSS/` |
+| `deploy-sdk` | `deploy/sdk/BOARD_YYYYMMDD_HHMMSS/` |
+| `deploy-esdk` | `deploy/esdk/BOARD_YYYYMMDD_HHMMSS/` |
+| `deploy-swu` | `deploy/swu/BOARD_YYYYMMDD_HHMMSS/` |
+
+### Clean Targets
+
+| Target | Description |
+|--------|-------------|
 | `clean` | Remove `build/` |
+| `clean-docker` | Remove all three Docker images (kas, sdk, esdk) |
 | `clean-all` | Remove `build/`, `downloads/`, `sstate-cache/` |
+
+### Utilities
+
+| Target | Description |
+|--------|-------------|
 | `completion` | Install bash tab-completion into `~/.bashrc` |
-| `help` | Print usage summary |
+| `help` | Print usage and board list |
 
-### Variables
+### Boards
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BOARD` | `rpi5` | Board name — must match `kas/<BOARD>.yaml` |
-| `DEVICE` | *(required for flash)* | Block device, e.g. `/dev/sdb` |
-| `SWU_VERSION` | `YYYYMMDDhhmm` | Version string embedded in the `.swu` package |
-| `KAS_IMAGE` | `rpi5-kas:latest` | Docker image used for the build container |
-| `BUILD_DIR` | `./build` | BitBake build output directory |
-| `DL_DIR` | `./downloads` | Source download cache |
-| `SSTATE_DIR` | `./sstate-cache` | Shared state cache |
+| Board | Description |
+|-------|-------------|
+| `rpi5` *(default)* | BCM2712, Cortex-A76 64-bit, A/B OTA |
+| `rpi4-64` / `rpi4` | BCM2711, Cortex-A72 64/32-bit |
+| `rpi3-64` / `rpi3` | BCM2837, Cortex-A53 64/32-bit |
+| `rpi2` | BCM2836, Cortex-A7 32-bit |
+| `rpi1` | BCM2835, ARM1176 32-bit |
+| `rpi0` / `rpi0-wifi` | BCM2835, ARM1176 32-bit |
+| `rpi0-2w` / `rpi0-2w-64` | RPi Zero 2 W, Cortex-A53 32/64-bit |
+| `cm1` / `cm3` / `cm5` | Compute Modules |
+| `rpi-armv7` / `rpi-armv8` | Generic ARMv7/ARMv8 |
 
 ---
 
@@ -212,7 +280,7 @@ header:
 machine: my-custom-machine
 ```
 
-Then run `make build BOARD=my-custom-board`.
+Then run `make build my-custom-board`.
 
 ---
 
@@ -307,11 +375,11 @@ swupdate-client -v <device-ip> build/rpi5-<VERSION>.swu
 Generates a self-contained installer (`*.sh`) containing the cross-toolchain and target sysroot:
 
 ```bash
-make sdk BOARD=rpi5
-# Installer: build/tmp/deploy/sdk/poky-glibc-x86_64-core-image-full-cmdline-*.sh
+make sdk rpi5
+# Installer deployed to: deploy/sdk/rpi5_YYYYMMDD_HHMMSS/
 ```
 
-Install and activate:
+Install and activate on any host machine:
 ```bash
 ./poky-glibc-x86_64-*.sh -d ~/rpi-sdk
 source ~/rpi-sdk/environment-setup-*
@@ -323,11 +391,89 @@ aarch64-poky-linux-gcc --version
 Includes `devtool`, recipe management, and a full layer checkout:
 
 ```bash
-make esdk BOARD=rpi5
-# Installer: build/tmp/deploy/sdk/poky-glibc-x86_64-core-image-full-cmdline-*-ext.sh
+make esdk rpi5
+# Installer deployed to: deploy/esdk/rpi5_YYYYMMDD_HHMMSS/
 ```
 
 Use `devtool add <recipe> <source>` to iterate on recipes without a full rebuild.
+
+---
+
+## SDK Docker Images
+
+For teams that want a fully pre-configured container with the SDK already installed, two additional Docker images are provided.
+
+### SDK image (`docker/sdk/`)
+
+A single command runs the full chain — Yocto SDK build, installer staging, Docker image build, and deployment:
+
+```bash
+make sdk-image rpi5
+```
+
+What happens internally:
+1. Ensure the KAS build container is present
+2. Run `bitbake -c populate_sdk` inside the container
+3. Locate the generated `.sh` installer and copy it to `docker/sdk/sdk.sh`
+4. Build the `rpi5-sdk:latest` Docker image (Ubuntu 22.04 + SDK at `/opt/poky/sdk`)
+5. Deploy the installer to `deploy/sdk/rpi5_YYYYMMDD_HHMMSS/`
+
+Using the SDK container:
+```bash
+docker run --rm -it rpi5-sdk:latest
+# Inside the container:
+source /opt/poky/sdk/environment-setup-*
+aarch64-poky-linux-gcc --version
+```
+
+Override the install path or image name:
+```bash
+# These internal variables are rarely needed
+make sdk-image rpi5 SDK_INSTALL_DIR=/opt/my-sdk
+```
+
+### eSDK image (`docker/esdk/`)
+
+Same chain for the extensible SDK:
+
+```bash
+make esdk-image rpi5
+```
+
+What happens internally:
+1. Ensure the KAS build container is present
+2. Run `bitbake -c populate_sdk_ext` inside the container
+3. Locate the generated `*-ext-*.sh` installer and copy it to `docker/esdk/esdk.sh`
+4. Build the `rpi5-esdk:latest` Docker image (Ubuntu 22.04 + eSDK at `/opt/poky/esdk`)
+5. Deploy the installer to `deploy/esdk/rpi5_YYYYMMDD_HHMMSS/`
+
+Using the eSDK container:
+```bash
+docker run --rm -it rpi5-esdk:latest
+# Inside the container:
+source /opt/poky/esdk/environment-setup-*
+devtool add my-recipe ~/src/my-project
+```
+
+### Conditional rebuild
+
+```bash
+# Only builds if the image does not already exist in Docker
+make ensure-sdk-image
+make ensure-esdk-image
+```
+
+### `kas-image` — force-rebuild the KAS Docker image
+
+```bash
+make kas-image
+```
+
+### Removing all Docker images
+
+```bash
+make clean-docker   # removes rpi5-kas, rpi5-sdk, and rpi5-esdk images
+```
 
 ---
 
@@ -355,7 +501,7 @@ IMAGE_INSTALL:append = " my-package another-package"
 
 Then run:
 ```bash
-make rebuild-image BOARD=rpi5   # cleanses sstate for the image recipe first
+make rebuild-image rpi5
 ```
 
 ### Adding a new recipe
@@ -392,12 +538,12 @@ After activation, pressing `<Tab>` completes:
 | Input | Completions |
 |-------|-------------|
 | `make <Tab>` | all targets |
-| `make BOARD=<Tab>` | board names from `kas/*.yaml` |
-| `make DEVICE=<Tab>` | block devices (`/dev/sd*`, `/dev/mmcblk*`) |
-| `make KAS_IMAGE=<Tab>` | local Docker images |
-| `make BUILD_DIR=<Tab>` | directories |
+| `make image <Tab>` | board names |
+| `make sdk <Tab>` | board names |
+| `make esdk <Tab>` | board names |
+| `make flash <Tab>` | board names |
 
-Board names are read dynamically from the `kas/` directory, so new boards are automatically available without editing the completion script.
+Board names are read dynamically from `kas/boards/`, so new boards are automatically available without editing the completion script.
 
 ---
 
@@ -410,7 +556,7 @@ The `DL_DIR` and `SSTATE_DIR` directories are mounted into the container and sha
 ### Interactive BitBake shell
 
 ```bash
-make shell BOARD=rpi4-64
+make shell rpi4-64
 # Inside the container:
 bitbake core-image-full-cmdline
 bitbake -c devshell my-recipe
@@ -438,10 +584,13 @@ kas-container shell kas/rpi5.yaml -c "bitbake my-recipe"
 kas-container shell kas/rpi5.yaml -- bitbake my-recipe
 ```
 
-### Docker image is stale
+### Docker images are stale
 
 ```bash
-make image        # force-rebuild the KAS Docker image
+make kas-image        # force-rebuild the KAS Yocto build container
+make sdk-image rpi5   # rebuild the SDK Docker image (re-runs full chain)
+make esdk-image rpi5  # rebuild the eSDK Docker image (re-runs full chain)
+make clean-docker     # remove all three images (kas + sdk + esdk)
 ```
 
 ### Freeing disk space
@@ -449,4 +598,5 @@ make image        # force-rebuild the KAS Docker image
 ```bash
 make clean        # removes build/ (~50–100 GB)
 make clean-all    # also removes downloads/ and sstate-cache/
+make clean-docker # removes Docker images
 ```
