@@ -5,6 +5,7 @@ repos:
   meta-acadia:
     url: git@github.com:SiliconCentric/meta-acaida.git
     branch: scarthgap
+    commit: HEAD
     path: meta/meta-acadia
     layers:
       .:
