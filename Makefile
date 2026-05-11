@@ -269,10 +269,10 @@ swu: build
 	@mkdir -p $(BUILD_DIR)/swu
 	@gzip -kfc "$(ROOTFS)" > "$(BUILD_DIR)/swu/rootfs.ext4.gz"
 	@sed "s|@@VERSION@@|$(SWU_VERSION)|" \
-	    meta/meta-custom/swupdate/sw-description \
+	    meta/meta-acadia/swupdate/sw-description \
 	    > "$(BUILD_DIR)/swu/sw-description"
-	@cp meta/meta-custom/swupdate/pre-install.sh  "$(BUILD_DIR)/swu/"
-	@cp meta/meta-custom/swupdate/post-install.sh "$(BUILD_DIR)/swu/"
+	@cp meta/meta-acadia/swupdate/pre-install.sh  "$(BUILD_DIR)/swu/"
+	@cp meta/meta-acadia/swupdate/post-install.sh "$(BUILD_DIR)/swu/"
 	@cd "$(BUILD_DIR)/swu" && \
 	    printf 'sw-description\npre-install.sh\npost-install.sh\nrootfs.ext4.gz\n' | \
 	    cpio -ov -H newc > "$(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu"

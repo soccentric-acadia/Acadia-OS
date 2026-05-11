@@ -1,0 +1,10 @@
+header:
+  version: 14
+
+repos:
+  meta-acadia:
+    url: git@github.com:SiliconCentric/meta-acaida.git
+    branch: scarthgap
+    path: meta/meta-acadia
+    layers:
+      .:

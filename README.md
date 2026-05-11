@@ -138,7 +138,7 @@ rpi/
 │       └── esdk.sh             # eSDK installer (staged by 'make esdk-image')
 │
 ├── meta/
-│   └── meta-custom/            # Project-specific Yocto layer
+│   └── meta-acadia/            # Project-specific Yocto layer
 │       ├── conf/layer.conf
 │       ├── recipes-core/
 │       │   ├── images/core-image-full-cmdline.bbappend  # Image customisation
@@ -286,7 +286,7 @@ Then run `make build my-custom-board`.
 
 ## Image Contents
 
-The image is `core-image-full-cmdline` with the following additions from `meta-custom`:
+The image is `core-image-full-cmdline` with the following additions from `meta-acadia`:
 
 ### Connectivity (`rpi5-connectivity`)
 - **Ethernet** — DHCP via systemd-networkd (`10-eth.network`)
@@ -317,7 +317,7 @@ The image is `core-image-full-cmdline` with the following additions from `meta-c
 
 ## Partition Layout (RPi 5 / CM5)
 
-The custom WKS file (`meta-custom/wic/sdimage-rpi5.wks`) creates a four-partition A/B layout optimised for 256 GB cards:
+The custom WKS file (`meta-acadia/wic/sdimage-rpi5.wks`) creates a four-partition A/B layout optimised for 256 GB cards:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -493,7 +493,7 @@ Grows the root partition to fill the available SD card space using `parted` + `r
 
 ### Adding packages
 
-Edit `meta/meta-custom/recipes-core/images/core-image-full-cmdline.bbappend`:
+Edit `meta/meta-acadia/recipes-core/images/core-image-full-cmdline.bbappend`:
 
 ```bitbake
 IMAGE_INSTALL:append = " my-package another-package"
@@ -506,7 +506,7 @@ make rebuild-image rpi5
 
 ### Adding a new recipe
 
-Place it under `meta/meta-custom/recipes-<category>/<name>/<name>.bb`. The layer's `conf/layer.conf` auto-discovers all `recipes-*/*/*.bb` files.
+Place it under `meta/meta-acadia/recipes-<category>/<name>/<name>.bb`. The layer's `conf/layer.conf` auto-discovers all `recipes-*/*/*.bb` files.
 
 ### Configuring Wi-Fi credentials
 
@@ -518,7 +518,7 @@ Or build the credentials directly into the image by modifying `recipes-connectiv
 
 ### Pinning or updating the kernel
 
-Edit `meta/meta-custom/recipes-kernel/linux/linux-raspberrypi_6.6.bbappend` and update `SRCREV_machine` to the desired commit hash.
+Edit `meta/meta-acadia/recipes-kernel/linux/linux-raspberrypi_6.6.bbappend` and update `SRCREV_machine` to the desired commit hash.
 
 ### Changing the Poky/layer branch
 

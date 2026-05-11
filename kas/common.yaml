@@ -5,7 +5,7 @@ header:
     - repos/meta-openembedded.yaml
     - repos/meta-raspberrypi.yaml
     - repos/meta-swupdate.yaml
-    - repos/meta-custom.yaml
+    - repos/meta-acadia.yaml
 
 distro: poky
 target: core-image-full-cmdline
