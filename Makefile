@@ -11,7 +11,7 @@ ESDK_IMAGE       ?= rpi5-esdk:latest
 KAS_VERSION      ?= 4.5
 
 # Yocto image recipe built by build / sdk / esdk / rebuild-image targets
-IMAGE_TARGET     ?= core-image-full-cmdline
+IMAGE_TARGET     ?= acadia-image
 
 # OTA package version (overridable: make swu SWU_VERSION=1.2.3)
 SWU_VERSION      ?= $(shell date +%Y%m%d%H%M)
@@ -263,22 +263,56 @@ esdk: ensure-image kas-container-script
 ## Usage: make swu   or   make swu SWU_VERSION=1.2.3
 swu: build
 	$(eval ROOTFS := $(shell find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \
-	    -name "core-image-full-cmdline-$(MACHINE)*.rootfs.ext4" 2>/dev/null | sort -V | tail -1))
+	    -name "acadia-image-$(MACHINE)*.rootfs.ext4" \
+	    -o -name "core-image-full-cmdline-$(MACHINE)*.rootfs.ext4" 2>/dev/null \
+	    | sort -V | tail -1))
 	@test -n "$(ROOTFS)" || \
 	    { echo "ERROR: No .rootfs.ext4 found. Ensure 'ext4' is in IMAGE_FSTYPES."; exit 1; }
 	@echo "Packaging OTA update from: $(ROOTFS)"
 	@mkdir -p $(BUILD_DIR)/swu
+
+	# --- rootfs ---
 	@gzip -kfc "$(ROOTFS)" > "$(BUILD_DIR)/swu/rootfs.ext4.gz"
+
+	# --- kernel + DTB (required for I3: kernel/DTB included in OTA) ---
+	$(eval KERNEL := $(shell find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \
+	    -name "kernel_2712.img" 2>/dev/null | sort -V | tail -1))
+	$(eval DTB := $(shell find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \
+	    -name "bcm2712-rpi-5-b.dtb" 2>/dev/null | sort -V | tail -1))
+	@test -n "$(KERNEL)" || \
+	    { echo "WARNING: kernel_2712.img not found — kernel will not be updated in this .swu"; }
+	@test -n "$(DTB)" || \
+	    { echo "WARNING: bcm2712-rpi-5-b.dtb not found — DTB will not be updated in this .swu"; }
+	@[ -n "$(KERNEL)" ] && cp "$(KERNEL)" "$(BUILD_DIR)/swu/kernel_2712.img" || true
+	@[ -n "$(DTB)" ]    && cp "$(DTB)"    "$(BUILD_DIR)/swu/bcm2712-rpi-5-b.dtb" || true
+
+	# --- sw-description ---
 	@sed "s|@@VERSION@@|$(SWU_VERSION)|" \
 	    meta/meta-acadia/swupdate/sw-description \
 	    > "$(BUILD_DIR)/swu/sw-description"
 	@cp meta/meta-acadia/swupdate/pre-install.sh  "$(BUILD_DIR)/swu/"
 	@cp meta/meta-acadia/swupdate/post-install.sh "$(BUILD_DIR)/swu/"
-	@cd "$(BUILD_DIR)/swu" && \
-	    printf 'sw-description\npre-install.sh\npost-install.sh\nrootfs.ext4.gz\n' | \
-	    cpio -ov -H newc > "$(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu"
+
+	# --- optional RSA signing (C2) ---
+	@if [ -f "$(BUILD_DIR)/swu/../../meta/meta-acadia/swupdate/keys/swupdate-private.pem" ]; then \
+	    echo "Signing sw-description with RSA-4096 ..."; \
+	    openssl dgst -sha256 \
+	        -sign "meta/meta-acadia/swupdate/keys/swupdate-private.pem" \
+	        -out  "$(BUILD_DIR)/swu/sw-description.sig" \
+	        "$(BUILD_DIR)/swu/sw-description"; \
+	    echo "Packing SIGNED .swu ..."; \
+	    cd "$(BUILD_DIR)/swu" && \
+	        printf 'sw-description\nsw-description.sig\npre-install.sh\npost-install.sh\nrootfs.ext4.gz\nkernel_2712.img\nbcm2712-rpi-5-b.dtb\n' | \
+	        cpio -ov -H newc > "$(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu"; \
+	else \
+	    echo "WARNING: No private key found — packing UNSIGNED .swu (run scripts/generate-swu-keys.sh to enable signing)"; \
+	    cd "$(BUILD_DIR)/swu" && \
+	        printf 'sw-description\npre-install.sh\npost-install.sh\nrootfs.ext4.gz\nkernel_2712.img\nbcm2712-rpi-5-b.dtb\n' | \
+	        cpio -ov -H newc > "$(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu"; \
+	fi
 	@echo "OTA package: $(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu"
 	@$(MAKE) --no-print-directory deploy-swu DEPLOY_TS=$(DEPLOY_TS)
+
 
 ## Flash to SD card.  Usage: make flash rpi5 DEVICE=/dev/sdX
 flash:

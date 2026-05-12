@@ -1,0 +1,96 @@
+name: Build Acadia OS
+
+on:
+  push:
+    branches: [main, scarthgap]
+  pull_request:
+    branches: [main, scarthgap]
+  # Allow manual trigger for testing builds against a specific board
+  workflow_dispatch:
+    inputs:
+      board:
+        description: 'Target board'
+        required: true
+        default: 'rpi5'
+        type: choice
+        options: [rpi5, rpi4-64]
+      image_target:
+        description: 'Image recipe'
+        required: true
+        default: 'acadia-image'
+
+jobs:
+  build:
+    name: Yocto build — ${{ matrix.board }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [rpi5]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Docker layer cache ─────────────────────────────────────────────────
+      - name: Cache kas Docker image
+        uses: actions/cache@v4
+        with:
+          path: /tmp/kas-image.tar
+          key: kas-image-${{ hashFiles('docker/yocto/Dockerfile') }}
+
+      # ── sstate + download caches ───────────────────────────────────────────
+      # The sstate cache is keyed by Yocto release + machine so different
+      # boards share the same host tools entries.
+      - name: Restore sstate cache
+        uses: actions/cache@v4
+        with:
+          path: sstate-cache
+          key: sstate-${{ matrix.board }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            sstate-${{ matrix.board }}-${{ github.ref_name }}-
+            sstate-${{ matrix.board }}-
+
+      - name: Restore downloads cache
+        uses: actions/cache@v4
+        with:
+          path: downloads
+          key: downloads-${{ hashFiles('kas/**') }}-${{ github.sha }}
+          restore-keys: |
+            downloads-${{ hashFiles('kas/**') }}-
+            downloads-
+
+      # ── Build ──────────────────────────────────────────────────────────────
+      - name: Install kas
+        run: |
+          pip3 install --quiet kas
+
+      - name: Run Yocto build via kas
+        env:
+          KAS_BUILD_DIR: ${{ github.workspace }}/build
+          DL_DIR:        ${{ github.workspace }}/downloads
+          SSTATE_DIR:    ${{ github.workspace }}/sstate-cache
+        run: |
+          kas build kas/boards/${{ matrix.board }}.yaml --target acadia-image
+
+      # ── Collect artifacts ──────────────────────────────────────────────────
+      - name: Upload SD card image artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: acadia-image-${{ matrix.board }}-${{ github.sha }}
+          path: |
+            build/tmp/deploy/images/**/*.wic.bz2
+            build/tmp/deploy/images/**/*.wic.bmap
+          retention-days: 14
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ matrix.board }}-${{ github.sha }}
+          path: |
+            build/tmp/log/
+            build/tmp/work/**/temp/log.*
+          retention-days: 7

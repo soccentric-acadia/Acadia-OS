@@ -8,7 +8,7 @@ header:
     - repos/meta-acadia.yaml
 
 distro: poky
-target: core-image-full-cmdline
+target: acadia-image
 
 local_conf_header:
   base: |
