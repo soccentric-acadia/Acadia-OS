@@ -3,7 +3,7 @@ header:
 
 repos:
   meta-acadia:
-    url: git@github.com:SiliconCentric/meta-acadia.git
+    url: git@github.com:SiliconCentric/meta-acaida.git
     branch: scarthgap
     # TODO: pin to a specific commit — run scripts/pin-layers.sh
     path: meta/meta-acadia
