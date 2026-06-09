@@ -282,4 +282,45 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
 - **CONF_VERSION mismatch**: Ensure `CONF_VERSION = "2"` in `kas/common.yaml` (KAS regenerates `build/conf/local.conf` on every invocation)
 - **kas shell syntax**: Use `kas-container shell kas/rpi5.yaml -c "bitbake my-recipe"` (not `--`)
 - **Stale Docker images**: `make kas-image`, `make sdk-image rpi5`, `make esdk-image rpi5`, `make clean-docker`
-- **Free disk space**: `make clean` (build/), `make clean-all` (build/, downloads/, sstate-cache/), `make clean-docker` (Docker images)
+- **Free disk space**: `make clean` (build/), `make clean-all` (build/, downloads/, sstate-cache/), `make clean-docker`
+
+## C1 — A/B OTA Rollback: lessons learned (2026-06-09)
+
+**Do**
+- **Trust the `RDEPENDS` chain for tool binaries.** `libubootenv` ships
+  `fw_setenv`/`fw_printenv` to `${bindir}` (typically `/usr/bin/`) via
+  GNUInstallDirs — *not* to `/usr/sbin`. Don't hardcode `/usr/sbin/fw_setenv`
+  in scripts or `ConditionPathExists=` in unit files; resolve with
+  `command -v` (or list both canonical paths with `ConditionPathExists=|…`).
+- **Two copies of `post-install.sh` exist, only one ships in the .swu.**
+  `meta/meta-acadia/swupdate/post-install.sh` is bundled into the SWUpdate
+  package (referenced by `data = "postinst"` in `sw-description`). The
+  copy in `meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/`
+  is what gets installed to the device's `/usr/lib/swupdate/`. Whenever
+  you change the post-install logic, edit **both** — drift here is how
+  the rollback chain silently regresses.
+- **U-Boot env is the firmware-level source of truth; `/boot/boot_state`
+  is the userspace accelerator.** Keep both updated by `post-install.sh`
+  (set `upgrade_available=1`, `bootcount=0`, `bootlimit=3`) and have
+  `bootcount-reset.service` clear the U-Boot env on a healthy boot —
+  only after `swupdate-bootcheck.service` has passed.
+- **Promote kernel/DTB integrity checks out of warning logs.** A mismatch
+  in `/proc/cmdline` vs. `/boot/cmdline.txt` is **proof** the new slot
+  didn't boot, not a warning. Roll back immediately rather than burning
+  a `tries_remaining` tick.
+
+**Don't**
+- **Don't gate rollback on a service that runs after the network is up.**
+  `swupdate-bootcheck.service` must be `After=local-fs.target` and
+  `Before=network.target` — anything later means a broken slot is
+  exposed to the LAN before the rollback path runs.
+- **Don't write a stub `boot.cmd` and rely on the env defaults.** The
+  U-Boot env bootcount flow (RAUC-style `bootcount`/`bootlimit`/
+  `altbootcmd`) only works if `boot.cmd` *initialises* the env on
+  first boot and ticks `bootcount` on subsequent boots. A 4-line
+  `boot.scr` that just calls `booti` silently disables the rollback
+  chain regardless of what the userspace scripts say.
+- **Don't `set -e` through `fw_setenv` calls without logging.** When
+  the env is corrupt, the tool returns non-zero. Wrap each
+  `fw_setenv` with `||` + a `logger` line so a rollback is *visible*
+  in the journal, not just a missing confirmation. (Docker images)
