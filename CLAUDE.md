@@ -650,3 +650,62 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   will be tempted to "fix" the production code to handle
   empty input, and discover the test was guarding a
   non-existent scenario.
+
+## C7 — Issue #21 SWUpdate RSA signing: lessons learned (2026-06-10)
+
+**Do**
+- **Ship a throwaway-but-valid placeholder for the public key.**
+  A PEM with `-----BEGIN PUBLIC KEY-----\nPLACEHOLDER` is
+  not a valid RSA key — `swupdate -k` will fail to parse it
+  and the daemon will refuse to start.  Either ship nothing
+  (and have the recipe `bbfatal` if the file is missing) or
+  ship a real RSA-2048 key with a clear "REPLACE ME" header
+  comment.  The placeholder is a *valid* key, so the image
+  boots; the matching *private* key is never committed, so
+  the .swu is unverifiable.  This forces the operator (or
+  the CI vault) to do the right thing.
+- **Use `SWUPDATE_SIGNING` per the meta-swupdate README.**
+  meta-swupdate ships its own RSA signing helper
+  (`SWUPDATE_SIGNING = "RSA"` + `SWUPDATE_PRIVATE_KEY`); the
+  existing Makefile hand-rolls the same flow.  Both work;
+  the Makefile path is the "we control the package layout"
+  route, the meta-swupdate path is the "let BitBake do it"
+  route.  Match the route the project's other recipes use —
+  Acadia-OS is currently hand-rolled, so stay consistent.
+  If you migrate to meta-swupdate's helper, deprecate the
+  Makefile block; do not run both.
+- **Make the gate fail-closed with an opt-out env var.**
+  A missing private key is a *production* error, not a
+  warning.  `make swu` must exit 1 by default.  Provide a
+  deliberate escape hatch (`SWU_ALLOW_UNSIGNED=1`) so the
+  build pipeline can iterate on the rest of the .swu
+  (rootfs, kernel, DTB) without needing a real key.  The
+  on-target swupdate daemon still rejects the resulting
+  .swu, so the operator can never accidentally ship it.
+
+**Don't**
+- **Don't `env VAR= function` in bats.** Functions live in
+  the current shell; `env` runs its argument in a child
+  process where the function isn't visible.  `command not
+  found`.  Use `( VAR=val function )` — the parens force
+  a subshell, but in this subshell the *parent* shell's
+  function table is still visible (functions are
+  inherited).  `gate_with` in the test does this.
+- **Don't `VAR= cmd` as a one-liner test assertion in bats.**
+  `SWU_ALLOW_UNSIGNED= check_swu_gate ...` sets VAR=empty
+  for `check_swu_gate` and then propagates the function's
+  exit code to the test body.  If the function returns 1
+  (the expected case for "empty should NOT bypass the
+  gate"), the test body exits 1 and the test fails with
+  the wrong reason.  Always wrap in `run ... ; [ "$status"
+  -eq 0 ]` or `!` for the inverse.
+- **Don't commit a `-----BEGIN PUBLIC KEY-----` block with
+  literal "PLACEHOLDER" text.** It's not a valid PEM, the
+  swupdate parser will reject it, and the entire image will
+  fail to boot.  The placeholder must be a *valid* key
+  (real RSA modulus), just one whose private half is not
+  in the repo.  The signed-by-the-throwaway path won't
+  be useful to an attacker, and any real .swu signed by
+  the production private key won't verify against the
+  throwaway public key, so the operator will get a loud
+  "signature mismatch" on first install.
