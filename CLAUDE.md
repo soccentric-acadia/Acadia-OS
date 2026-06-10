@@ -709,3 +709,43 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   the production private key won't verify against the
   throwaway public key, so the operator will get a loud
   "signature mismatch" on first install.
+
+## C8 — Issue #56 dmesg-capture journal pipe: lessons learned (2026-06-10)
+
+**Do**
+- **Pipe diagnostic data to systemd-cat, never redirect to `/var/log/`.**
+  Poky makes `/var/log` a symlink to `/var/volatile/log` by default,
+  so any file written there is lost on reboot.  The persistent
+  journal lives in `/var/log/journal/` (bind-mounted to persistent
+  storage under meta-acadia's storage layout) and survives across
+  reboots.  `systemd-cat -t <tag> -p <prio>` is the canonical
+  pipe; the tag becomes the syslog identifier for `journalctl -t`.
+- **Order `After=systemd-journald.service` for any service that
+  pipes into systemd-cat.**  Without it, the pipe can block on a
+  journald that isn't yet accepting messages, or silently drop
+  entries.  This is the same lesson as the bootcount-reset
+  ordering fix: order unit dependencies on the *socket*, not the
+  network.
+- **Add explicit `RDEPENDS:${PN} = "systemd util-linux"` for any
+  recipe that uses systemd-cat or dmesg.**  They're pulled in by
+  core-image-full-cmdline, but a future image that doesn't ship
+  them (e.g. a minimal Acadia variant) will fail at first boot
+  with `systemd-cat: command not found`.  Better to be explicit.
+- **Anchor the bats `SUT` path with enough `../` segments.**  The
+  canonical pattern is `${BATS_TEST_DIRNAME}/../../../recipes-...`,
+  not `${BATS_TEST_DIRNAME}/../files/...`.  Tests live under
+  `recipes-<cat>/<recipe>/tests/`, so the relative path is three
+  segments up.  This is consistent with the other Acadia tests.
+
+**Don't**
+- **Don't add `--since=@0` and `-p info` as cosmetic changes —
+  the *behavior* is what matters.**  `--since=@0` reads the full
+  ring buffer (the default reads since uptime, which is fine on
+  fresh boot but loses the early messages on slow systems).  `-p
+  info` keeps the entry in the journal's default priority filter.
+  Both are correctness, not cosmetics.
+- **Don't push the branch from `develop` if a `fix/<#>-*` branch
+  already exists.**  The first attempt landed on develop because
+  the auto-checkout in this session put HEAD on develop after the
+  issue comment.  Always verify the branch before `git commit` —
+  the branch name in the issue comment is the contract.
