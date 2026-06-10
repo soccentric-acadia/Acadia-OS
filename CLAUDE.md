@@ -794,3 +794,76 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   outside any function).**  bats runs gather at parse time,
   before any test's `setup()` has run, so `${BIN}` and `${TMP}`
   are unset.  All stub installation belongs in `setup()`.
+
+## C12 — Issue #46 acadia-data-init mount ordering: lessons learned (2026-06-10)
+
+**Do**
+- **`BindsTo=` is the lifetime tie; `After=` is the start
+  order.  Both are needed; neither replaces the other.**
+  `After=acadia-data-init.service` on the .mount ensures init
+  starts first; `BindsTo=acadia-data-init.service` ensures
+  the mount dies if init dies.  A test that asserts the
+  *new* relationship without also asserting the *old* one
+  still in place lets a future refactor break the start
+  ordering in the name of "BindsTo is enough" (it isn't —
+  BindsTo doesn't start the unit, it just kills it on
+  failure).  Same lesson for `Requires=` (lifecycle) vs
+  `Wants=` (soft preference) vs `After=` (start order) on
+  the client side: all three must be asserted.
+- **Read `RemainAfterExit=yes` as load-bearing, not cosmetic.**
+  Without it, a `Type=oneshot` service is "inactive" after
+  ExecStart completes.  `BindsTo=` would then immediately
+  kill the mount unit (because its referent went "inactive"
+  → "failed").  The fix is `RemainAfterExit=yes` so the
+  service counts as "active" after success.  The C12 test
+  guards this with an explicit assertion because it's the
+  easiest thing to drop in a "tidy up the .service" pass.
+- **Walk the cross-component dependency chain, not just the
+  recipe under test.**  The acadia-data-init recipe is fine;
+  the defect is in the *other* unit (acadia-client.service)
+  that depends on it.  `test_acadia_data_init_mount.bats`
+  uses `${BATS_TEST_DIRNAME}/../../../recipes-connectivity/
+  acadia-client/files` to reach across the layer — a recipe
+  test that only inspects its own .service file is blind
+  to upstream / downstream wiring.
+- **Static guard the *absence* of new unit types when a
+  specific fix level was chosen.**  Issue #46 offered three
+  fix levels (ordering only / + active verification / +
+  runtime repair .path unit).  We chose level 1.  The test
+  "no .path / .timer / .socket unit added" catches a
+  future contributor who adds a runtime-repair path unit
+  "because it would be useful" — without revisiting the
+  decision, the layer accumulates a moving part that the
+  test was deliberately written to exclude.
+- **Test `SYSTEMD_SERVICE` lists every unit the recipe
+  ships, not just the ones the recipe "is about".**  The
+  acadia-data-init recipe ships both a .service and a
+  .mount; a future refactor that only lists the .service
+  in `SYSTEMD_SERVICE` would silently fail to package the
+  .mount.  Assert both names.
+
+**Don't**
+- **Don't ship a `Wants=` relationship as the only safety
+  net for "mount must be up before client starts".**
+  `Wants=` is a soft preference: if the wanted unit is
+  missing or fails, the wanter is unaffected.  The client
+  starts, the bind isn't there, the data goes to the wrong
+  filesystem, the OTA wipes it.  `Requires=` is the hard
+  fail-on-missing guard; `Wants=` should be left in
+  *additionally* for activation-ordering niceness, but the
+  lifecycle invariant must use `Requires=`.
+- **Don't treat `After=` as a substitute for `BindsTo=`
+  (or vice versa) when the failure mode is "the referent
+  unit dies mid-flight".**  `After=` orders the start; it
+  does nothing at runtime.  `BindsTo=` ties the lifetimes
+  but does not start the bound unit.  The C5 lesson (kernel
+  / DTB size-bounds per-file) had a similar flavour: don't
+  gate the *right* invariant on a single mechanism.
+- **Don't add a runtime-repair .path / .timer unit as a
+  drive-by in a "harden the ordering" PR.**  PathExists=
+  triggers are useful, but they add a moving part, a new
+  failure mode, and a new test surface.  The C12 fix
+  deliberately chose level 1 (ordering only) and the test
+  guards that choice — a follow-up issue can propose the
+  runtime repair *with* its own test plan.  Don't bundle
+  "useful additions" into a fix-the-bug commit.
