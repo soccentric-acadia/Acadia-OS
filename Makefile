@@ -362,19 +362,33 @@ swu: build
 	@cp meta/meta-acadia/swupdate/pre-install.sh  "$(BUILD_DIR)/swu/"
 	@cp meta/meta-acadia/swupdate/post-install.sh "$(BUILD_DIR)/swu/"
 
-	# --- optional RSA signing (C2) ---
-	@if [ -f "$(BUILD_DIR)/swu/../../meta/meta-acadia/swupdate/keys/swupdate-private.pem" ]; then \
+	# --- RSA signing (C2 / Issue #21) ---
+	# Production builds MUST ship a signed .swu: the target's swupdate
+	# daemon is configured to verify signatures against
+	# /etc/swupdate/swupdate-public.pem, and an unsigned package is
+	# rejected on install.  Fail closed (exit 1) if the operator has
+	# not provided a private key — a warning is not enough because
+	# the resulting .swu is unusable on a production device.
+	@if [ ! -f "meta/meta-acadia/swupdate/keys/swupdate-private.pem" ]; then \
+	    echo "" >&2; \
+	    echo "ERROR: SWUpdate private key missing." >&2; \
+	    echo "  Expected: meta/meta-acadia/swupdate/keys/swupdate-private.pem" >&2; \
+	    echo "  Generate: scripts/generate-swu-keys.sh" >&2; \
+	    echo "  Or set    SWU_ALLOW_UNSIGNED=1 to build a dev-only .swu (target will reject it)." >&2; \
+	    echo "" >&2; \
+	    test "$(SWU_ALLOW_UNSIGNED)" = "1" || exit 1; \
+	fi
+	@if [ -f "meta/meta-acadia/swupdate/keys/swupdate-private.pem" ]; then \
 	    echo "Signing sw-description with RSA-4096 ..."; \
 	    openssl dgst -sha256 \
 	        -sign "meta/meta-acadia/swupdate/keys/swupdate-private.pem" \
 	        -out  "$(BUILD_DIR)/swu/sw-description.sig" \
 	        "$(BUILD_DIR)/swu/sw-description"; \
-	    echo "Packing SIGNED .swu ..."; \
 	    cd "$(BUILD_DIR)/swu" && \
 	        printf 'sw-description\nsw-description.sig\npre-install.sh\npost-install.sh\nrootfs.ext4.gz\n$(SWU_KERNEL)\n$(SWU_DTB)\n' | \
 	        cpio -ov -H newc > "$(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu"; \
 	else \
-	    echo "WARNING: No private key found — packing UNSIGNED .swu (run scripts/generate-swu-keys.sh to enable signing)"; \
+	    echo "Building UNSIGNED .swu (SWU_ALLOW_UNSIGNED=1; target will REJECT it) ..."; \
 	    cd "$(BUILD_DIR)/swu" && \
 	        printf 'sw-description\npre-install.sh\npost-install.sh\nrootfs.ext4.gz\n$(SWU_KERNEL)\n$(SWU_DTB)\n' | \
 	        cpio -ov -H newc > "$(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu"; \

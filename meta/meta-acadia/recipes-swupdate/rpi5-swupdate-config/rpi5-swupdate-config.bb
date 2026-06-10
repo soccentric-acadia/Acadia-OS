@@ -21,6 +21,7 @@ SRC_URI = " \
     file://bootcount-reset.sh \
     file://bootcount-reset.service \
     file://fw_env.config \
+    file://swupdate-public.pem \
 "
 
 S = "${WORKDIR}"
@@ -89,6 +90,12 @@ do_install() {
     install -d ${D}${systemd_system_unitdir}/swupdate.service.d
     install -m 0644 ${WORKDIR}/swupdate-webui.conf \
                     ${D}${systemd_system_unitdir}/swupdate.service.d/webui.conf
+
+    # Issue #21: install the SWUpdate RSA public key to /etc/swupdate/.
+    # The key enables signature verification of incoming .swu packages.
+    # The private counterpart lives in the build/CI vault only.
+    install -m 0644 ${WORKDIR}/swupdate-public.pem \
+                    ${D}${sysconfdir}/swupdate/swupdate-public.pem
 }
 
 FILES:${PN} += " \
@@ -103,4 +110,5 @@ FILES:${PN} += " \
     ${systemd_system_unitdir}/swupdate-webui-auth-init.service \
     ${systemd_system_unitdir}/bootcount-reset.service \
     ${systemd_system_unitdir}/swupdate.service.d/ \
+    ${sysconfdir}/swupdate/swupdate-public.pem \
 "
