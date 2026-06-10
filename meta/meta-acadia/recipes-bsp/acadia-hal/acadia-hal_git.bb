@@ -1,6 +1,15 @@
 SUMMARY = "Acadia Hardware Abstraction Layer"
 DESCRIPTION = "HAL library for the Acadia platform, providing hardware abstraction interfaces."
-HOMEPAGE = "https://github.com/SiliconCentric/Acaida-HAL"
+# Issue #62: the previous HOMEPAGE and SRC_URI used a misspelled
+# variant of "Acadia-HAL" (the same character-swap typo also
+# present in the kas config — see CLAUDE.md C2).  Per the master
+# SoCcentric instructions §3, the canonical project name is
+# "Acadia".  The misspelled URL was a typo-squat target — a
+# malicious actor could register the misspelled repo and serve
+# a backdoored source.  Fix the URL; the test_acadia_hal_typo.bats
+# regression test fails the build if the misspelling ever returns.
+# See issue #62 for the full threat-model writeup.
+HOMEPAGE = "https://github.com/SiliconCentric/Acadia-HAL"
 LICENSE = "CLOSED"
 # Upstream is a private repo; no LICENSE file is shipped.  BitBake
 # requires a LIC_FILES_CHKSUM entry (issue #34).  We point at the
@@ -10,8 +19,11 @@ LICENSE = "CLOSED"
 # LICENSE file's checksum once upstream publishes one.
 LIC_FILES_CHKSUM = "file://${COREBASE}/../meta/meta-acadia/recipes-bsp/acadia-hal/acadia-hal_git.bb;md5=00000000000000000000000000000000"
 
+# Issue #62: same misspelling fix in SRC_URI.  The protocol=ssh
+# + user=git combination is a known-contradictory pair (issue #37);
+# we leave that for a separate fix to keep this change atomic.
 SRC_URI = " \
-    git://github.com/SiliconCentric/Acaida-HAL.git;protocol=ssh;user=git;branch=master \
+    git://github.com/SiliconCentric/Acadia-HAL.git;protocol=ssh;user=git;branch=master \
     file://security.md \
 "
 SRCREV = "${AUTOREV}"
