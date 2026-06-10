@@ -749,3 +749,48 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   the auto-checkout in this session put HEAD on develop after the
   issue comment.  Always verify the branch before `git commit` —
   the branch name in the issue comment is the contract.
+
+## C9 — Issue #54 pre-install slot label: lessons learned (2026-06-10)
+
+**Do**
+- **Anchor on persistent identifiers (PARTUUID, GPT label, FS
+  UUID), not block-device paths.**  Block-device paths are
+  kernel-assigned, hardware-dependent, and change between SD,
+  NVMe, and USB boot.  The WKS already gives us `rootfs-a` /
+  `rootfs-b` labels, so use them.  This is the same pattern as
+  `findmnt -no SOURCE /` for the active device — but the label
+  layer is the one that survives across the block-device-type
+  transition.
+- **For `lsblk -n -o LABEL <dev>`, the device is the LAST
+  positional arg, with `-n -o LABEL` before it.**  When stubbing
+  `lsblk` in a bats test, scan all `$@` for the device path —
+  don't assume `$1` is the device.  The actual call shape is
+  `lsblk -n -o LABEL /dev/mmcblk0p2`, so a case on `$1`
+  matches `-n`, not the device.
+- **When the script under test writes to `/dev`, `/run`, or
+  other privileged paths, sed-rewrite the script into TMP and
+  run the copy.**  Don't try to fake `/dev` or `/run` with
+  bind-mounts (needs root) or with namespace tricks (not
+  portable).  A 3-line `sed -e 's|/dev/foo|TMP/foo|g' file >
+  TMP/file` is the simplest correct test harness, and the diff
+  to the original is fully visible for review.
+- **Stub external commands via PATH-prepended shim directory,
+  not via `alias` or function override.**  `alias` is
+  non-interactive-only; function override doesn't survive
+  `bash subshell`.  A `BIN=$(mktemp -d)` directory with
+  executable stubs prepended to PATH is the only thing that
+  consistently works in a bats `run` block.
+
+**Don't**
+- **Don't use `! grep -qE 'mmcblk0p[23]' file` if the file
+  *comment* legitimately references the old behaviour.**  The
+  defensive test I wrote initially failed because the issue
+  comment in the new script *says* "previous version hardcoded
+  /dev/mmcblk0p2/p3".  Anchor the regex on the syntactic
+  context (case-arm `(/dev/...)`, assignment `INACTIVE_DEV=
+  /dev/...`) — the comment is just documentation, not a
+  regression.
+- **Don't pre-write stubs at bats-gather time (top of file
+  outside any function).**  bats runs gather at parse time,
+  before any test's `setup()` has run, so `${BIN}` and `${TMP}`
+  are unset.  All stub installation belongs in `setup()`.
