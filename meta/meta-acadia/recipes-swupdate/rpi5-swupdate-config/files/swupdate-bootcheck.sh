@@ -69,7 +69,11 @@ if [[ "${HEALTH_OK}" == "true" ]]; then
     fi
 fi
 
-# Verify kernel/DTB files are intact (compare checksums if available, otherwise check existence and size)
+# Verify kernel/DTB files are intact (per-file size bounds; issue #26).
+# Each file has a different reasonable size range, so we cannot share
+# a single bound.  The previous code used a single `if SIZE < 1MB ||
+# SIZE > 10MB` for both, which always tripped on a 60 KB DTB and
+# caused HEALTH_OK=false on every healthy boot.
 if [[ "${HEALTH_OK}" == "true" ]]; then
     for f in kernel_2712.img bcm2712-rpi-5-b.dtb; do
         if [[ ! -f "/boot/${f}" ]]; then
@@ -77,11 +81,28 @@ if [[ "${HEALTH_OK}" == "true" ]]; then
             logger -t swupdate-bootcheck "${f} missing after boot"
             break
         fi
-        # Check file size is reasonable (kernel should be > 1MB, DTB < 10MB)
         SIZE=$(stat -c%s "/boot/${f}" 2>/dev/null || echo 0)
-        if [[ "${SIZE}" -lt 1048576 ]] || [[ "${SIZE}" -gt 10485760 ]]; then
+        case "${f}" in
+            kernel_2712.img)
+                # Compiled kernel: at least 1 MB (typical 7-15 MB on rpi5).
+                MIN=$((1024 * 1024))
+                MAX=$((20 * 1024 * 1024))   # 20 MB upper bound
+                ;;
+            *-rpi-*-b.dtb|*-rpi-*-cm*.dtb|*-rpi-*.dtb)
+                # DTB: at least 10 KB (typical 50-80 KB on rpi5).
+                MIN=$((10 * 1024))
+                MAX=$((5 * 1024 * 1024))    # 5 MB upper bound
+                ;;
+            *)
+                logger -t swupdate-bootcheck "WARN: unknown file '${f}', using generic bounds"
+                MIN=1024
+                MAX=$((50 * 1024 * 1024))
+                ;;
+        esac
+        if [[ "${SIZE}" -lt "${MIN}" ]] || [[ "${SIZE}" -gt "${MAX}" ]]; then
             HEALTH_OK=false
-            logger -t swupdate-bootcheck "${f} size ${SIZE} bytes seems invalid"
+            logger -t swupdate-bootcheck \
+                "${f} size ${SIZE} bytes outside [${MIN}, ${MAX}]"
             break
         fi
     done

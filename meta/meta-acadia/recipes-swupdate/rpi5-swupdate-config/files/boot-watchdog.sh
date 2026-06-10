@@ -83,9 +83,10 @@ elif [[ "${CURRENT_ROOT}" != "${EXPECTED_ROOT}" ]]; then
     rollback "cmdline mismatch (expected='${EXPECTED_ROOT}' got='${CURRENT_ROOT}')"
 fi
 
-# ── Health check 2: kernel + DTB integrity ──────────────────────────────────
-# If either file is missing or implausibly sized, the OTA is broken.
-# Burn two tries instead of one to reach rollback faster.
+# ── Health check 2: kernel + DTB integrity (per-file bounds, issue #26) ───
+# Each file has a different reasonable size range — kernel is multi-MB,
+# DTB is tens-of-KB.  The previous shared `if SIZE < 1MB || SIZE > 10MB`
+# always tripped on a 60 KB DTB and caused spurious rollbacks.
 INTEGRITY_OK=true
 for f in kernel_2712.img bcm2712-rpi-5-b.dtb; do
     if [[ ! -f "/boot/${f}" ]]; then
@@ -94,9 +95,24 @@ for f in kernel_2712.img bcm2712-rpi-5-b.dtb; do
         break
     fi
     SIZE=$(stat -c%s "/boot/${f}" 2>/dev/null || echo 0)
-    if [[ "${SIZE}" -lt 1048576 ]] || [[ "${SIZE}" -gt 10485760 ]]; then
+    case "${f}" in
+        kernel_2712.img)
+            MIN=$((1024 * 1024))
+            MAX=$((20 * 1024 * 1024))
+            ;;
+        *-rpi-*-b.dtb|*-rpi-*-cm*.dtb|*-rpi-*.dtb)
+            MIN=$((10 * 1024))
+            MAX=$((5 * 1024 * 1024))
+            ;;
+        *)
+            MIN=1024
+            MAX=$((50 * 1024 * 1024))
+            ;;
+    esac
+    if [[ "${SIZE}" -lt "${MIN}" ]] || [[ "${SIZE}" -gt "${MAX}" ]]; then
         INTEGRITY_OK=false
-        logger -t boot-watchdog "${f} size ${SIZE} bytes seems invalid"
+        logger -t boot-watchdog \
+            "${f} size ${SIZE} bytes outside [${MIN}, ${MAX}]"
         break
     fi
 done
