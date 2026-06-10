@@ -599,3 +599,54 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   continue iterating (the existing `break` is correct) so
   the rollback path runs immediately. A logged warning
   without an action is just noise.
+
+## C6 — Issue #59 openssh Include directive: lessons learned (2026-06-10)
+
+**Do**
+- **Anchor every `grep` that guards a config-file patch.** The
+  unanchored `'Include.*sshd_config\.d'` matched the
+  *commented-out* line too, so when upstream sshd_config
+  shipped `# Include /etc/ssh/sshd_config.d/*.conf` the
+  recipe skipped the prepend silently.  The fix is
+  `'^[[:space:]]*Include[[:space:]]+.*sshd_config\.d'`.  This
+  pattern matches the directive *as written* — leading
+  whitespace tolerated (some distros indent), comments
+  rejected.
+- **Fail loudly in a build recipe when a *runtime* invariant
+  isn't met.** BitBake's `bbfatal` aborts the build with a
+  visible error in the build log; a missing Include at boot
+  is invisible (sshd just ignores unknown config keys).  The
+  re-grep + bbfatal is a 4-line post-condition that turns a
+  security regression into a build break.
+- **Test the regression in BOTH directions.** Test 2 covers
+  the original bug (commented Include is not enough) and
+  test 3 covers the opposite: a *real* Include on the first
+  line is not duplicated.  Both directions matter —
+  a fix that "always prepends" would pass test 2 and
+  silently break test 3.
+
+**Don't**
+- **Don't rely on an unanchored `grep` to detect a config
+  directive.** A `grep -q Include` will always match —
+  comments, substrings, even a `Setting "Include"` line in
+  documentation.  Anchor with `^[[:space:]]*` (matches
+  start-of-line, ignoring leading whitespace) and a
+  whitespace-separator before the argument (`Include[[:space:]]+`)
+  to rule out "Includesomething" or "IncludePath".
+- **Don't put `bbfatal` in a subshell or after `set -e`
+  recovery.** The current code uses `|| true` on the sed
+  failure so the post-condition check can still run; this
+  is intentional.  If the sed fails AND the grep finds no
+  Include, the build aborts.  If you `set -e` the
+  whole block, a failed sed would never trigger the
+  post-condition grep.
+- **Don't write a bats test for an *empty* file case that
+  the production code can't actually hit.** BitBake's
+  `do_install` always receives a non-empty upstream
+  `sshd_config` (it's a config file shipped by openssh,
+  not a user-generated blank).  Test the realistic
+  whitespace-only case instead.  A test for "empty file"
+  is a "test for the test's sake" — the next refactor
+  will be tempted to "fix" the production code to handle
+  empty input, and discover the test was guarding a
+  non-existent scenario.
