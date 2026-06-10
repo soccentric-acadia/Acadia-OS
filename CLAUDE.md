@@ -324,3 +324,179 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   the env is corrupt, the tool returns non-zero. Wrap each
   `fw_setenv` with `||` + a `logger` line so a rollback is *visible*
   in the journal, not just a missing confirmation. (Docker images)
+
+## C2 — OS review lessons learned (2026-06-10, 48 issues filed)
+
+**Do**
+- **Use `lsblk` / `/sys/class/block/*/partition` to derive parent disk
+  and partition number.** Regex-parsing `/dev/mmcblk0p2` works for SD,
+  fails on `nvme0n1p2` and `sda1`. The pattern `lsblk -ndo PKNAME +
+  cat /sys/class/block/.../partition` is portable across all block
+  devices — and is what `rpi5-home-init.sh` already uses. `expand-rootfs.sh`
+  should match.
+- **Pin every external layer and git SRCREV to a 40-char SHA.** Three
+  layer yamls (`poky`, `meta-openembedded`, `meta-swupdate`) still set
+  `commit: HEAD`; `acadia-hal_git.bb` uses `SRCREV = "${AUTOREV}"`.
+  HEAD-tracking breaks reproducibility (§1, ISO 26262). Replace with
+  pinned SHAs; add `SOURCE_DATE_EPOCH` to `common.yaml` for
+  bit-for-bit rebuilds.
+- **One canonical image recipe per project.** `acadia-image.bb` and
+  `core-image-full-cmdline.bbappend` are two images that overlap
+  content but inherit from different Yocto base recipes (`core-image`
+  vs `core-image-full-cmdline`). Delete one — `acadia-image.bb` is
+  the project standard (Makefile + CI both target it). Convert the
+  other to a bbappend to the first, or delete.
+- **CMake-based recipes: add `install(TARGETS ...)` upstream
+  (preferred) or via patch — never `do_install` shell `find | install`
+  loops.** The shell loop is fragile (find's `-o` precedence is a
+  footgun; one missing parenthesis drops half the headers), bypasses
+  BitBake's QA, and forces INSANE_SKIP. The same applies to
+  `tomlplusplus_3.4.0.bb`: rename to `_git.bb`, use
+  `PV = "<ver>+git${SRCPV}"`, drop `ALLOW_EMPTY` + empty `FILES:${PN}`.
+- **Set `LIC_FILES_CHKSUM` even for `LICENSE = "CLOSED"` recipes.**
+  BitBake's QA flags this; the alternative (no checksum) silently
+  ships the package when the LICENSE file is changed upstream. See
+  the pattern in `tomlplusplus_3.4.0.bb:6` (good) vs.
+  `acadia-hal_git.bb` (missing).
+- **`swupdate-bootcheck.sh` size bounds are per-file, not per-loop.**
+  Iterate the loop and apply bounds per file: kernel > 1 MB, DTB
+  > 10 KB, both < 10 MB. The current `||` (OR) trips on every
+  healthy DTB boot (60 KB) — a health check that always reports
+  unhealthy is worse than no health check.
+- **Use `lsblk -no LABEL` for slot detection, not `/dev/mmcblk0p[23]`
+  hardcodes.** The WKS labels partitions `rootfs-a` / `rootfs-b`;
+  the opposite label is the inactive slot. This unblocks NVMe
+  (RPi 5 with NVMe HAT) and USB boot.
+- **Persistent diagnostic data goes to the journal, not `/var/log/`.**
+  `dmesg-capture.service` writes to `/var/log/dmesg.boot`, which
+  lives on the volatile filesystem and is lost on every reboot.
+  Pipe to `systemd-cat` instead — `Storage=persistent` keeps it
+  across reboots (`journalctl -t dmesg-boot -b -1`).
+
+**Don't**
+- **Don't `set -e` with `source <config-file>`.** The config file
+  is parsed as a shell script; any line that looks like a command
+  (e.g. `confirmed=false` in `boot_state`) aborts the script under
+  `set -euo pipefail`. Use a `while IFS='=' read` loop instead —
+  it never evaluates values, only assigns them.
+- **Don't gate boot-time reset on `network-online.target` or
+  external service health.** `bootcount-reset.service` waits for
+  the network and `acadia-client.service`; on a lab board with a
+  dead uplink the reset never fires and U-Boot rolls back a healthy
+  slot. Match `swupdate-bootcheck.service` ordering:
+  `After=local-fs.target`, `Before=network.target`.
+- **Don't use `install -o` / `install -g` in first-boot scripts.**
+  Busybox's `install` silently ignores both flags; the result is
+  `root:root` ownership and the user can't log in. Use
+  `mkdir -m 0750` + `chown` explicitly. The same applies to
+  `find -o` precedence in the recipe `do_install` — the `-o` binds
+  to the *preceding* `-name`, so only the first pattern is matched.
+- **Don't ship `pre-install.sh` with dead code.** The
+  `/mnt/rootfs-inactive` mountpoint check is never reached — the
+  inactive partition is referred to by the `/dev/swupdate-inactive`
+  symlink, not by a mountpoint. Dead code drifts.
+- **Don't use `user=git` in `SRC_URI` with `protocol=ssh`.** The
+  combination `git://...;protocol=ssh;user=git` is contradictory
+  (user=git is meaningful only for the git:// protocol). Pick
+  one — HTTPS for CI, SSH for interactive dev.
+- **Don't hardcode RPi 5 kernel/DTB names in `make swu`.** The
+  targets `kernel_2712.img` and `bcm2712-rpi-5-b.dtb` are BCM2712
+  (RPi 5 / CM5) only. RPi 4 uses `kernel_2711.img`,
+  `bcm2711-rpi-4-b.dtb`; RPi 3 uses `kernel_2710.img`,
+  `bcm2710-rpi-3-b.dtb`. Per-board: derive from `MACHINE` (see
+  `kas/boards/*.yaml`) or expose `SWU_KERNEL` / `SWU_DTB` as
+  overridable Make variables.
+- **Don't commit dev workstation scratch files (`patch_health.py`,
+  `/config` with one URL, audit markdown, planning textfiles).** The
+  repo root is not a scratch pad. `gh issue list --state all`
+  shows the issues; the markdown planning files duplicate them and
+  will drift.
+- **Don't put `core-image` and `core-image-full-cmdline` in the
+  same project's images.** They are different base recipes with
+  different IMAGE_FEATURES (full-cmdline adds bash, debug-tweaks,
+  sshd-dropbear). Mixing them gives an image that builds but does
+  not match the documented behaviour.
+- **Don't trust the `meta-acadia` kas fetch — it has a typo
+  ("Acaida") and silently falls back to the in-tree layer.** Either
+  remove the kas entry and rely on the in-tree layer, or fix the
+  URL. Verify with
+  `grep -n 'Acaida' kas/repos/*.yaml meta/ -r 2>/dev/null` (no
+  matches expected).
+- **Don't ship a default SSH password or print credentials to
+  `/dev/console`.** The web-UI auth init script currently prints
+  the admin password to the serial console and the journal on
+  first boot. Logged serial consoles capture the password
+  permanently. Either fail-closed (no web UI until operator
+  sets a credential) or reveal the password once on the tty,
+  suppress in journal.
+- **Don't use `ALLOW_EMPTY` + `FILES:${PN} = ""` to ship a
+  "dev-only" package.** The convention in Yocto is a `-dev` split
+  package; the empty `FILES` + `ALLOW_EMPTY` is hard to read
+  and signals "broken" to the next contributor.
+
+**Verification commands run during this review (2026-06-10)**
+- `git ls-files | sort` — 78 tracked files reviewed.
+- `gh auth status` — auth ok, scopes include `repo`, `write:packages`.
+- `gh issue list --state all --limit 200` — 19 historical (CLOSED)
+  + 48 new (OPEN) issues filed; all labelled `[OS]` + a §7 category.
+- `gh label create` — 7 new labels added: `build`, `security`,
+  `improvement`, `test`, `concurrency`, `perf`, `OS`.
+
+**Build/Test commands (not yet validated — see Issue #60 for harness)**
+- Build: `make image rpi5` (Kas container, ~2h cold, ~5m warm).
+- SWU:   `make swu rpi5 SWU_VERSION=$(date +%Y%m%d%H%M)`.
+- Flash: `make flash rpi5 DEVICE=/dev/sdX`.
+- Shell: `make shell rpi5` then `bitbake acadia-image`.
+
+## C3 — Issue #30 boot_state parser: lessons learned (2026-06-10)
+
+**Do**
+- **Treat the parser, not the test, as the source of truth.** The
+  `while IFS='=' read -r key value; do case …` block in
+  `swupdate-bootcheck.sh` and `boot-watchdog.sh` is the canonical
+  parser. The inline copy in
+  `tests/test_boot_state_parser.bats` is a regression test — if
+  either side changes, the other must change in the same commit.
+- **Anchor the read loop on `${key}` for matching, never on
+  `${value}`.** A backtick in the value slot must round-trip as a
+  string (test "backticks NOT executed") and not influence control
+  flow.
+- **`git rebase --onto` a forked develop back onto `origin/develop`
+  immediately after every PR squash-merge.** Otherwise `develop`
+  accumulates un-rebased historical commits and every future push
+  needs a force. Cleanly resolved 3 historical commits (f2d5935,
+  4b0c154, 62cfe83) after PR #69 — pattern was: my parser in HEAD
+  vs `source ${BOOT_STATE}` in historical commit, always keep
+  `--ours`.
+- **Commit the regression test in the same branch as the fix.** The
+  bats harness (Issue #60) wasn't ready, so I copied the parser
+  inline into `test_boot_state_parser.bats` to run against the real
+  shell. Both the fix and the test landed in PR #69.
+- **Document the *real* vulnerability in the script header.** The
+  initial claim ("`set -e` aborts on `confirmed=false`") was
+  wrong — bash treats that as a variable assignment, exit 0. The
+  *real* defect is command injection via `source` of a writable
+  FAT32 file (demonstrated with `INJECTED=$(touch ${SENTINEL})`).
+  Comments now explain the actual attack.
+
+**Don't**
+- **Don't `source` any file from a writable mount.** `/boot` is FAT32
+  and `chmod 666` from the running system. `source boot_state` is
+  arbitrary code execution as root, period — no matter what `set -e`
+  is set to. Use a read loop, not `source`.
+- **Don't trust a single demo command as proof.** I claimed
+  `set -e` would abort because `confirmed=false` would be exec'd —
+  wrong. `source` returns the last command's exit code, and a bare
+  variable assignment is exit 0. Re-validate the threat model from
+  scratch before filing a security issue.
+- **Don't fight `git rebase` interactively without a clear
+  conflict-resolution rule.** When HEAD and the rebased commit both
+  rewrite the same file, decide *before* opening the conflict
+  markers: this time it was "keep `--ours`" because the parser fix
+  is the entire point. For files that should take the historical
+  change (e.g. CLAUDE.md updates that diverged), take `--theirs`.
+- **Don't leave `develop` ahead of `origin/develop` after a
+  squash-merge.** The squash-merge makes origin's tip a new commit;
+  the 4–5 historical commits in develop are no longer reachable.
+  `git rebase origin/develop` linearizes — do it in the same
+  session as the squash-merge, before opening the next issue.
