@@ -46,7 +46,11 @@ while IFS=: read -r username _ uid _ _ homedir shell; do
 
     if [[ ! -d "${homedir}" ]]; then
         logger -t rpi5-home-init "Creating ${homedir} for ${username} (uid=${uid})"
-        install -d -m 0750 -o "${username}" -g "${username}" "${homedir}"
+        # Issue #44: busybox `install` silently ignores -o/-g; use
+        # mkdir + chown explicitly.  Portable across coreutils and
+        # busybox variants, deterministic ownership, no surprise.
+        mkdir -m 0750 -p "${homedir}"
+        chown "${username}:${username}" "${homedir}"
         # Populate from /etc/skel
         cp -a /etc/skel/. "${homedir}/" 2>/dev/null || true
         chown -R "${username}:${username}" "${homedir}"
