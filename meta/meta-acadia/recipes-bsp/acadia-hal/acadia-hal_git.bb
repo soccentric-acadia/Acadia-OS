@@ -10,7 +10,10 @@ LICENSE = "CLOSED"
 # LICENSE file's checksum once upstream publishes one.
 LIC_FILES_CHKSUM = "file://${COREBASE}/../meta/meta-acadia/recipes-bsp/acadia-hal/acadia-hal_git.bb;md5=00000000000000000000000000000000"
 
-SRC_URI = "git://github.com/SiliconCentric/Acaida-HAL.git;protocol=ssh;user=git;branch=master"
+SRC_URI = " \
+    git://github.com/SiliconCentric/Acaida-HAL.git;protocol=ssh;user=git;branch=master \
+    file://security.md \
+"
 SRCREV = "${AUTOREV}"
 
 PV = "1.0+git${SRCPV}"
@@ -80,6 +83,11 @@ do_install() {
     find ${S}/src -name "*.h" -o -name "*.hpp" | while read f; do
         install -m 0644 "$f" ${D}${includedir}/${PN}/
     done
+
+    # Issue #47: install the security policy doc into /usr/share/doc
+    # so an operator reading 'dpkg -L acadia-hal' (or rpm -ql) sees it.
+    install -d ${D}${docdir}/${PN}
+    install -m 0644 ${WORKDIR}/security.md ${D}${docdir}/${PN}/security.md
 }
 
 # Unversioned .so files: upstream produces no versioned .so names.
@@ -97,3 +105,10 @@ FILES:${PN}-dev  = "${includedir} ${libdir}/cmake ${libdir}/pkgconfig ${datadir}
 # dev-so on the main package is the legitimate skip — we ship
 # unversioned .so as a deliberate consequence of upstream layout.
 INSANE_SKIP:${PN} += "dev-so"
+
+# Issue #47: security policy.  See files/security.md (installed to
+# /usr/share/doc/acadia-hal/security.md by the do_install step below).
+# The HAL ships no setuid binaries and no file capabilities — neither
+# the recipe nor the systemd units add them.  Future contributors must
+# NOT add chmod u+s, setcap, or AmbientCapabilities without review.
+PRIVATE_LIBS = "libacadia-hal*.so"
