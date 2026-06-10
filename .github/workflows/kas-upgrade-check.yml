@@ -1,0 +1,104 @@
+name: kas-container upgrade check
+
+# Issue #68: kas-container is a third-party (Siemens) shell script that
+# is downloaded on first `make` run and committed to the repo.  A
+# security CVE in kas-container 4.5.x (or a bug fix) is not picked up
+# automatically — the operator must run `make kas-upgrade` manually.
+#
+# This workflow enforces a periodic re-evaluation by:
+#   1. Downloading the upstream kas-container for the pinned KAS_VERSION.
+#   2. Comparing its SHA256 to the local kas-container's SHA256.
+#   3. Failing the run (and posting a workflow annotation) if the two
+#      diverge — that's a signal an upgrade is available.
+#
+# Schedule: weekly on Monday morning.  Manual dispatch is available.
+# Override KAS_VERSION via the workflow_dispatch input.
+
+on:
+  schedule:
+    # Weekly: Monday 09:00 UTC.
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      kas_version:
+        description: 'kas-container version to verify against'
+        required: false
+        default: '4.5'
+        type: string
+
+jobs:
+  verify:
+    name: kas-container SHA256 check
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine KAS_VERSION
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.kas_version }}" ]; then
+            echo "version=${{ github.event.inputs.kas_version }}" >> "$GITHUB_OUTPUT"
+          else
+            # Parse the Makefile default; fall back to the dispatch input.
+            make_version=$(grep -E '^KAS_VERSION[[:space:]]*\?=' Makefile | head -1 | sed -E 's/^KAS_VERSION[[:space:]]*\?=[[:space:]]*//')
+            echo "version=${make_version:-4.5}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Using KAS_VERSION=$(cat "$GITHUB_OUTPUT" | grep '^version=' | cut -d= -f2)"
+
+      - name: Compute local kas-container SHA256
+        id: local_sha
+        run: |
+          if [ ! -f kas-container ]; then
+            echo "local_sha=ABSENT" >> "$GITHUB_OUTPUT"
+            echo "::warning::kas-container is not committed; the next 'make image' will download it."
+          else
+            sha=$(sha256sum kas-container | awk '{print $1}')
+            echo "local_sha=${sha}" >> "$GITHUB_OUTPUT"
+            echo "Local kas-container SHA256: ${sha}"
+          fi
+
+      - name: Download upstream kas-container and compute its SHA256
+        id: upstream_sha
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          url="https://raw.githubusercontent.com/siemens/kas/refs/tags/${version}/kas-container"
+          echo "Downloading ${url} ..."
+          if ! curl -fsSL "${url}" -o /tmp/upstream-kas-container; then
+            echo "upstream_sha=DOWNLOAD_FAILED" >> "$GITHUB_OUTPUT"
+            echo "::error::Failed to download ${url}.  Is KAS_VERSION=${version} a valid release?"
+            exit 1
+          fi
+          sha=$(sha256sum /tmp/upstream-kas-container | awk '{print $1}')
+          echo "upstream_sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "Upstream kas-container SHA256: ${sha}"
+
+      - name: Compare SHAs
+        run: |
+          local_sha="${{ steps.local_sha.outputs.local_sha }}"
+          upstream_sha="${{ steps.upstream_sha.outputs.upstream_sha }}"
+
+          if [ "${local_sha}" = "ABSENT" ]; then
+            echo "::notice::Local kas-container is absent — the next 'make image' will download it."
+            exit 0
+          fi
+
+          if [ "${local_sha}" = "${upstream_sha}" ]; then
+            echo "✓ Local kas-container matches upstream (SHA256: ${local_sha})."
+            exit 0
+          fi
+
+          echo "::error::Local kas-container SHA256 does NOT match upstream."
+          echo "  Local    : ${local_sha}"
+          echo "  Upstream : ${upstream_sha}"
+          echo ""
+          echo "An upgrade is available.  Run:"
+          echo "  make kas-upgrade KAS_VERSION=${{ steps.version.outputs.version }}"
+          echo "then rebuild the build container:"
+          echo "  make kas-image"
+          echo "and validate end-to-end with:"
+          echo "  make image rpi5"
+          exit 1

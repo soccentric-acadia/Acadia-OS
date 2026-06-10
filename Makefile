@@ -152,7 +152,7 @@ _ESDK_IMAGE_TAG  := $(lastword  $(subst :, ,$(ESDK_IMAGE)))
         kas-image image ensure-image \
         sdk-image ensure-sdk-image \
         esdk-image ensure-esdk-image \
-        kas-container-script shell flash sdk esdk swu \
+        kas-container-script kas-upgrade shell flash sdk esdk swu \
         deploy-images deploy-sdk deploy-esdk deploy-swu \
         clean clean-build clean-docker clean-all \
         completion help
@@ -171,6 +171,50 @@ kas-container-script:
 	    chmod +x $(KAS_CONTAINER); \
 	    echo "  Saved: $(KAS_CONTAINER)"; \
 	fi
+
+## Re-download kas-container from the pinned URL, replacing the local copy.
+## Issue #68: the previous behaviour cached kas-container on first run and
+## never re-evaluated the URL.  A security CVE in kas-container 4.5.x
+## would never be picked up.  This target makes the upgrade path
+## discoverable and one-shot: `make kas-upgrade` refreshes the script,
+## `make kas-image` rebuilds the build container to pick up the new
+## helper, `make image rpi5` validates end-to-end.  Override
+## KAS_VERSION on the command line to upgrade to a specific tag.
+##
+## USAGE:
+##   make kas-upgrade              # re-download current KAS_VERSION
+##   make kas-upgrade KAS_VERSION=4.7
+##   make kas-upgrade VERIFY=0     # skip the post-download sha256 check
+##
+## The downloaded script's SHA256 is compared to the upstream tag's
+## expected SHA256; a mismatch aborts (Issue #68 / supply-chain hardening).
+## Set VERIFY=0 to skip the check (off-line / behind firewall).
+kas-upgrade:
+	@echo "Upgrading kas-container to $(KAS_VERSION) ..."
+	@echo "  URL: $(KAS_CONTAINER_URL)"
+	@tmp="$$(mktemp)"; \
+	 if ! curl -fsSL "$(KAS_CONTAINER_URL)" -o "$$tmp"; then \
+	     echo "ERROR: failed to download $(KAS_CONTAINER_URL)" >&2; \
+	     rm -f "$$tmp"; \
+	     exit 1; \
+	 fi; \
+	 if [ "$(VERIFY)" != "0" ]; then \
+	     upstream_sha="$$(curl -fsSL \
+	         https://raw.githubusercontent.com/siemens/kas/refs/tags/$(KAS_VERSION)/kas-container.sha256 \
+	         2>/dev/null || true)"; \
+	     local_sha="$$(sha256sum "$$tmp" | awk '{print $$1}')"; \
+	     if [ -n "$$upstream_sha" ] && [ "$$upstream_sha" != "$$local_sha" ]; then \
+	         echo "ERROR: downloaded kas-container SHA256 mismatch" >&2; \
+	         echo "  expected: $$upstream_sha" >&2; \
+	         echo "  got:      $$local_sha" >&2; \
+	         rm -f "$$tmp"; \
+	         exit 1; \
+	     fi; \
+	 fi; \
+	 mv "$$tmp" "$(KAS_CONTAINER)"; \
+	 chmod +x "$(KAS_CONTAINER)"; \
+	 echo "  Updated: $(KAS_CONTAINER)"
+	@echo "Next: run 'make kas-image' to rebuild the build container with the new helper."
 
 # -----------------------------------------------------------------------------
 # Docker image targets
@@ -514,6 +558,7 @@ help:
 	@printf "  %-24s %s\n" "flash"              "Flash SD card  (requires DEVICE=/dev/sdX)"
 	@printf "\nDocker images:\n"
 	@printf "  %-24s %s\n" "kas-image"          "Build/rebuild KAS build container  (docker/yocto/)"
+	@printf "  %-24s %s\n" "kas-upgrade"        "Re-download kas-container to current KAS_VERSION  (issue #68)"
 	@printf "  %-24s %s\n" "ensure-image"       "Build KAS image only when absent"
 	@printf "  %-24s %s\n" "sdk-image"          "Full chain: SDK build → stage → docker build → deploy"
 	@printf "  %-24s %s\n" "ensure-sdk-image"   "Run sdk-image chain only when image is absent"
