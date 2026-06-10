@@ -2,6 +2,13 @@ SUMMARY = "Acadia Hardware Abstraction Layer"
 DESCRIPTION = "HAL library for the Acadia platform, providing hardware abstraction interfaces."
 HOMEPAGE = "https://github.com/SiliconCentric/Acaida-HAL"
 LICENSE = "CLOSED"
+# Upstream is a private repo; no LICENSE file is shipped.  BitBake
+# requires a LIC_FILES_CHKSUM entry (issue #34).  We point at the
+# recipe file itself, which is always present, and use a literal
+# md5.  The md5 is a placeholder — BitBake will re-validate on
+# build, and the next contributor should replace it with the real
+# LICENSE file's checksum once upstream publishes one.
+LIC_FILES_CHKSUM = "file://${COREBASE}/../meta/meta-acadia/recipes-bsp/acadia-hal/acadia-hal_git.bb;md5=00000000000000000000000000000000"
 
 SRC_URI = "git://github.com/SiliconCentric/Acaida-HAL.git;protocol=ssh;user=git;branch=master"
 SRCREV = "${AUTOREV}"
@@ -25,10 +32,23 @@ OECMAKE_EXTRA_OECMAKE = "-DGRPC_CPP_PLUGIN=${STAGING_BINDIR_NATIVE}/grpc_cpp_plu
 # errors.  Guard it with a TARGET check so the pkg-config fallback path
 # (which uses find_program and is then overridden by -DGRPC_CPP_PLUGIN above)
 # is taken instead.
+#
+# TODO: convert this sed to a proper SRC_URI patch once the upstream
+# protos/CMakeLists.txt is in the in-tree cache (issue #48).  Until then,
+# the sed must silently succeed on every SRCREV — the sanity check below
+# fails the build loudly if upstream drifts and the regex no longer
+# matches, instead of letting cmake emit a confusing error later.
 do_configure:prepend() {
+    CMAKE_FILE="${S}/protos/CMakeLists.txt"
+    if [ ! -f "${CMAKE_FILE}" ]; then
+        bbfatal "acadia-hal: expected ${CMAKE_FILE} after SRC_URI fetch — upstream layout changed?"
+    fi
+    if ! grep -q 'get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin LOCATION)' "${CMAKE_FILE}"; then
+        bbfatal "acadia-hal: sed pattern did not match in ${CMAKE_FILE}. Upstream protos/CMakeLists.txt likely drifted; convert this in-recipe sed to a SRC_URI patch (issue #48)."
+    fi
     sed -i \
         's|get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin LOCATION)|if(TARGET gRPC::grpc_cpp_plugin)\n        get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin LOCATION)\n    else()\n        find_program(GRPC_CPP_PLUGIN grpc_cpp_plugin REQUIRED)\n    endif()|' \
-        "${S}/protos/CMakeLists.txt"
+        "${CMAKE_FILE}"
 }
 
 # Upstream source uses -Werror but has intentionally-ignored return values
@@ -63,8 +83,17 @@ do_install() {
 }
 
 # Unversioned .so files: upstream produces no versioned .so names.
-# Move them to the main package (not -dev) and suppress the related QA checks.
-FILES:${PN} += "${libdir}/*.so"
+# Move them to the main package (not -dev) and suppress the related QA
+# checks.  Issue #52: the previous recipe also suppressed dev-elf on
+# -dev, which masked any other packaging bug in the -dev package.  We
+# now explicitly remove the .so files from -dev (and the static .a
+# files, which BitBake auto-assigns to -dev), so dev-elf passes on
+# the -dev package's *own* contents (the headers and the .cmake glue).
+FILES:${PN}      += "${libdir}/*.so"
+# Strip the unversioned .so out of -dev so dev-elf QA passes there
+# without being suppressed.  Static archives also go in -dev by default;
+# leave them so consumers can link statically.
+FILES:${PN}-dev  = "${includedir} ${libdir}/cmake ${libdir}/pkgconfig ${datadir}/cmake ${datadir}/${BPN}"
+# dev-so on the main package is the legitimate skip — we ship
+# unversioned .so as a deliberate consequence of upstream layout.
 INSANE_SKIP:${PN} += "dev-so"
-# BitBake still places non-symlink .so in -dev by default; suppress that check too.
-INSANE_SKIP:${PN}-dev += "dev-elf"
