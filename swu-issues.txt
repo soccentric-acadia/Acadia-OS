@@ -1,0 +1,377 @@
+# GitHub Issues for Acadia-OS
+
+## C1: A/B OTA Rollback Mechanism Incomplete - Critical
+
+**Severity:** Critical
+**Files:** `meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/`
+**Issue:** The rollback mechanism is partially implemented but incomplete. If an update fails, devices may not automatically roll back to the previous working slot.
+
+**Problem:**
+- `swupdate-bootcheck.sh` only checks if `acadia-client.service` is active, but doesn't verify the service is actually working correctly
+- No `upgrade_available` flag is set in U-Boot env by `post-install.sh`
+- The boot-watchdog decrements `tries_remaining` but doesn't verify kernel/DTB actually booted properly
+
+**Impact:** A bad update can permanently brick the device without manual recovery.
+
+**Recommendation:**
+1. Implement proper rollback using RPi firmware's tryboot mechanism
+2. Ensure all required components work together correctly
+3. Add health check that runs BEFORE `network.target`, not after `acadia-client.service`
+
+---
+
+## C2: No SWUpdate Image Signing - Critical
+
+**Severity:** Critical
+**Files:** `Makefile` (lines 296-312), `meta/meta-acadia/swupdate/sw-description`
+**Issue:** SWUpdate packages are unsigned by default - any attacker on the network can push malicious updates.
+
+**Problem:**
+- `make swu` target only warns but continues if no private key found
+- `swupdate.cfg` has no `signingalg` or key configuration
+- Unsigned packages can be pushed to any device
+
+**Impact:** Any attacker on the network can push malicious updates to any device.
+
+**Recommendation:**
+1. Generate RSA-4096 keypair and store private key in CI secrets
+2. Commit only public key to repository
+3. Modify `make swu` to FAIL if no private key exists
+4. Add signing configuration to `swupdate.cfg`
+
+---
+
+## C3: Acadia-Client Excluded from Image - Critical
+
+**Severity:** Critical
+**Files:** `meta/meta-acadia/recipes-core/images/core-image-full-cmdline.bbappend` (line 99), `meta/meta-acadia/recipes-core/images/acadia-image.bb` (line 44)
+**Issue:** The primary application daemon (acadia-client) is not included in the OS image.
+
+**Problem:**
+- `core-image-full-cmdline.bbappend` line 99 has comment: `# NOTE: acadia-client excluded until upstream repo is available`
+- `acadia-client` recipe exists but with hardcoded `SRCREV` placeholder
+- `acadia-client` is NOT included in `IMAGE_INSTALL` - only `acadia-hal acadia-services`
+- `acadia-data-init` and `var-lib-acadia.mount` exist but are not wired up in image
+
+**Impact:** The primary application daemon is missing from the build.
+
+**Recommendation:**
+1. Remove the acadia-client exclusion comment and add to `IMAGE_INSTALL`
+2. Update `acadia-client_git.bb` to use proper pinned SRCREV when upstream repo is available
+3. Ensure proper systemd dependency ordering between `acadia-client` and `swupdate-bootcheck`
+
+---
+
+## C4: Default SSH Password in Documentation - Critical
+
+**Severity:** Critical
+**Files:** `README.md` (line 308), `meta/meta-acadia/recipes-core/images/core-image-full-cmdline.bbappend` (lines 104-110)
+**Issue:** Documentation shows default password 'rpi' for user 'rpi' which contradicts the locked user implementation.
+
+**Problem:**
+- `README.md` line 308 documents: `Username: **rpi** / Password: **rpi**`
+- `core-image-full-cmdline.bbappend` shows user is locked (`usermod -L rpi`)
+- The comment says "LOCKED (no password). SSH key access only" but the README contradicts this
+
+**Impact:** Any device running this image has a known default password that grants root access.
+
+**Recommendation:**
+1. Remove password hash entirely - user should have no password
+2. Document that SSH keys must be provisioned at build time or first-boot
+3. Ensure `PasswordAuthentication no` is in sshd_config (it is - verified)
+4. Consider making `rpi` user a service account (no sudo) with separate admin provisioning
+
+---
+
+## H1: Non-Reproducible Builds - High
+
+**Severity:** High
+**Files:** `kas/repos/poky.yaml`, `kas/repos/meta-openembedded.yaml`, `kas/repos/meta-swupdate.yaml`, `kas/repos/meta-acadia.yaml`, `meta/meta-acadia/recipes-bsp/acadia-hal/acadia-hal_git.bb`
+**Issue:** Builds are not reproducible - external layer repos use `HEAD` or `AUTOREV`.
+
+**Problem:**
+- `poky.yaml` line 8-11: `commit: HEAD` with TODO comment
+- `meta-openembedded.yaml` line 8-9: `commit: HEAD` with TODO comment
+- `meta-swupdate.yaml` line 8-9: `commit: HEAD` with TODO comment
+- `meta-acadia.yaml` line 8: `# TODO: pin to a specific commit`
+- `acadia-hal_git.bb` line 7: `SRCREV = "${AUTOREV}"` - always fetches latest HEAD
+
+**Impact:** Builds are not reproducible, debugging field issues is difficult.
+
+**Recommendation:**
+1. Pin all external layer repos to specific commit SHAs
+2. For `acadia-hal_git.bb`, replace `SRCREV = "${AUTOREV}"` with pinned SHA
+3. Add `SOURCE_DATE_EPOCH` in `kas/common.yaml` `local_conf_header`
+
+---
+
+## H2: SWUpdate Web UI Unauthenticated - High
+
+**Severity:** High
+**Files:** `meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/swupdate.cfg`, `meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/swupdate-start.sh`, `meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/swupdate-webui-auth-init.sh`
+**Issue:** Web UI authentication is not enabled by default.
+
+**Problem:**
+- `swupdate.cfg` has no authentication configuration
+- `swupdate-start.sh` checks for `/etc/swupdate/webui.passwd` but only sets auth if file exists
+- First-boot `swupdate-webui-auth-init.sh` generates credentials but runs after `swupdate.service` (dependency issue)
+- Web UI listens on port 8080 over plain HTTP with no TLS
+
+**Impact:** Anyone on the network can push updates without credentials.
+
+**Recommendation:**
+1. Ensure `swupdate-webui-auth-init.sh` runs before `swupdate.service` starts
+2. Add authentication configuration to `swupdate.cfg`
+3. Add HTTPS/TLS support for web UI
+4. Consider network isolation requirements for production
+
+---
+
+## H3: Kernel/DTB Handling in OTA May Be Complex - High
+
+**Severity:** High
+**Files:** `meta/meta-acadia/swupdate/sw-description`, `meta/meta-acadia/swupdate/pre-install.sh`, `meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/post-install.sh`
+**Issue:** Kernel and DTB handling in OTA updates is complex and may have edge cases.
+
+**Problem:**
+- The `.swu` package includes `kernel_2712.img` and `bcm2712-rpi-5-b.dtb` for RPi5/CM5
+- pre-install.sh backs up kernel/DTB but if any handler fails, rollback may be inconsistent
+- Complex handling may not work for all board types
+
+**Impact:** Kernel updates may require manual intervention on /boot partition if something fails.
+
+**Recommendation:**
+1. Test with boards that use different kernel filenames
+2. Add error handling for cases where kernel/DTB are missing
+3. Document which boards require kernel/DTB in OTA vs those that don't
+
+---
+
+## M1: Missing local.conf.sample - Medium
+
+**Severity:** Medium
+**Files:** Project root
+**Issue:** No standalone `local.conf.sample` exists for new developers.
+
+**Problem:**
+- KAS generates `build/conf/local.conf` on each run, but no standalone `local.conf.sample` exists
+- New developers unfamiliar with KAS cannot easily understand or replicate builds
+
+**Impact:** New developers cannot easily understand build configuration.
+
+**Recommendation:** Add `local.conf.sample` with comments explaining each configuration option.
+
+---
+
+## M2: Documentation Inconsistency - p4 Mount Point - Medium
+
+**Severity:** Medium
+**Files:** `meta/meta-acadia/wic/sdimage-rpi5.wks` (line 24), `meta/meta-acadia/swupdate/README.md` (line 64)
+**Issue:** Partition mount point documentation is inconsistent - WKS says `/home`, README says `/data`.
+
+**Problem:**
+- `sdimage-rpi5.wks` line 24: `part /home ... --label home`
+- `swupdate/README.md` line 64: describes p4 as `/data`
+- These are inconsistent
+
+**Impact:** Confusion about partition layout.
+
+**Recommendation:** Standardize on one mount point (`/home` or `/data`) and update all references.
+
+---
+
+## M3: SSH Password Authentication Not Explicitly Disabled - Medium
+
+**Severity:** Medium
+**Files:** `meta/meta-acadia/recipes-connectivity/openssh/files/acadia-hardening.conf`
+**Issue:** SSH hardening relies on include directive which may not be present in default sshd_config.
+
+**Problem:**
+- `acadia-hardening.conf` has `PasswordAuthentication no`
+- But openssh package must be configured to `Include /etc/ssh/sshd_config.d/*.conf` in main config
+- Default sshd_config from poky may not include this
+
+**Impact:** Password auth could be enabled if Include line is missing from sshd_config.
+
+**Recommendation:**
+1. Verify the Include directive is present in the main sshd_config
+2. Consider creating a complete sshd_config file rather than relying on include
+3. Add test to ensure password auth is truly disabled
+
+---
+
+## M4: Disk Usage Monitoring Not Documented - Medium
+
+**Severity:** Medium
+**Files:** `meta/meta-acadia/recipes-core/acadia-services/files/disk-usage-check.sh`, `disk-usage-check.service`, `disk-usage-check.timer`
+**Issue:** Disk usage monitoring exists but is not documented.
+
+**Problem:**
+- `disk-usage-check.sh`, `disk-usage-check.service`, and `disk-usage-check.timer` exist
+- Timer runs `OnBootSec=5min` and `OnUnitActiveSec=1h`
+- But no documentation or visibility on this feature
+
+**Impact:** Users don't know about disk usage monitoring.
+
+**Recommendation:** Add monitoring for disk usage alerts to documentation.
+
+---
+
+## M5: Kernel and DTB in OTA Payload - Medium
+
+**Severity:** Medium
+**Files:** `Makefile` (lines 277-287)
+**Issue:** Kernel and DTB inclusion in OTA payload may be board-specific.
+
+**Problem:**
+- `make swu` copies kernel/DTB specifically for RPi5 (`kernel_2712.img`, `bcm2712-rpi-5-b.dtb`)
+- Other boards may use different kernel filenames
+- This may not work for all board types
+
+**Impact:** OTA update may fail on non-RPi5 boards.
+
+**Recommendation:** Make kernel/DTB copying conditional on board type, or document which boards need kernel/DTB in OTA.
+
+---
+
+## L1: No local.conf Versioning - Low
+
+**Severity:** Low
+**Files:** `kas/common.yaml`
+**Issue:** Build configuration versioning not explicit.
+
+**Problem:**
+- `CONF_VERSION = "2"` is set but no `LOCALCONF_VERSION`
+- No tracking of what version of configuration is being used
+
+**Impact:** No way to track configuration version.
+
+**Recommendation:** Add explicit configuration version tracking.
+
+---
+
+## L2: Missing Kernel Config Fragments - Low
+
+**Severity:** Low
+**Files:** `meta/meta-acadia/recipes-kernel/linux/linux-raspberrypi_6.6.bbappend`
+**Issue:** No explicit control over which kernel drivers are included.
+
+**Problem:**
+- Only `SRCREV` is pinned, no kernel config fragments added
+- Drivers may be included by default in RPi kernel but not guaranteed
+
+**Impact:** No explicit control over kernel drivers.
+
+**Recommendation:** Add config fragments to ensure specific drivers (I2C, SPI, GPIO, CAN) are compiled.
+
+---
+
+## L3: No CI Testing for All Boards - Low
+
+**Severity:** Low
+**Files:** `.github/workflows/build.yml`
+**Issue:** CI workflow only tests rpi5 board.
+
+**Problem:**
+- CI workflow only tests `rpi5` board (line 29: `matrix: board: [rpi5]`)
+- Other 16 board configs are not automatically validated
+
+**Impact:** Other board types are not tested automatically.
+
+**Recommendation:** Expand CI to test multiple board types or add board matrix.
+
+---
+
+## L4: SSH Key Generation Not Documented - Low
+
+**Severity:** Low
+**Files:** Various
+**Issue:** Users don't know how to set up SSH keys for the rpi user.
+
+**Problem:**
+- Documentation says SSH key access only
+- But no instructions on how to inject SSH keys during image build
+
+**Impact:** Users don't know how to set up SSH key access.
+
+**Recommendation:** Document how to add SSH keys via `IMAGE_INSTALL` or first-boot configuration.
+
+---
+
+## L5: Patch File Naming Convention - Low
+
+**Severity:** Low
+**Files:** `meta/meta-acadia/recipes-connectivity/acadia-client/files/0001-fix-grpc-cpp-plugin-cross-compile.patch`
+**Issue:** No documented patch naming convention.
+
+**Problem:**
+- Patch file exists but no documented naming convention
+
+**Impact:** Inconsistent patch file naming.
+
+**Recommendation:** Document patch naming convention.
+
+---
+
+## L6: No Entropy Check for Credential Generation - Low
+
+**Severity:** Low
+**Files:** `meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/swupdate-webui-auth-init.sh`
+**Issue:** First-boot password generation doesn't verify system has enough entropy.
+
+**Problem:**
+- `swupdate-webui-auth-init.sh` generates password using `openssl rand` without entropy check
+- May generate weak passwords if system entropy is low
+
+**Impact:** Weak credentials may be generated on systems with low entropy.
+
+**Recommendation:** Add entropy check before credential generation.
+
+---
+
+## L7: U-Boot Configuration Questionable for RPi5 - Low
+
+**Severity:** Low
+**Files:** `kas/common.yaml` (lines 38-47)
+**Issue:** U-Boot configuration settings may not apply to RPi5 which uses Broadcom SoC firmware, not U-Boot as primary bootloader.
+
+**Problem:**
+- `UBOOT_ENV_SUFFIX`, `UBOOT_ENV`, `MACHINE_FEATURES:append = " u-boot"`, `RPI_USE_U_BOOT` settings may not apply to RPi5
+- RPi5 uses RPi firmware bootloader, not U-Boot as primary
+- U-Boot may only be used for secondary stage
+
+**Impact:** U-Boot configuration may not be appropriate for RPi5.
+
+**Recommendation:** Review and fix U-Boot configuration for RPi5/CM5.
+
+---
+
+## L8: No .gitignore for meta-acadia - Low
+
+**Severity:** Low
+**Files:** `meta/meta-acadia/`
+**Issue:** The layer has no `.gitignore` file, potentially committing build artifacts.
+
+**Problem:**
+- No `.gitignore` file in meta-acadia layer
+- Build artifacts may be accidentally committed
+
+**Impact:** Build artifacts may be committed to repository.
+
+**Recommendation:** Add `.gitignore` to meta-acadia layer to exclude build artifacts.
+
+---
+
+## L9: Documentation References Wrong Path - Low
+
+**Severity:** Low
+**Files:** `meta/meta-acadia/swupdate/README.md` (lines 114-131)
+**Issue:** README references wrong layer path.
+
+**Problem:**
+- README at line 114-131 references `meta/meta-custom/` instead of `meta/meta-acadia/`
+- This is confusing for users
+
+**Impact:** Users may look for files in wrong location.
+
+**Recommendation:** Update README to reference correct path `meta/meta-acadia/`.
