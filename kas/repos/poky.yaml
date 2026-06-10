@@ -5,10 +5,11 @@ repos:
   poky:
     url: https://git.yoctoproject.org/poky
     branch: scarthgap
-    # TODO: pin to a specific commit for reproducible builds.
-    # Run: scripts/pin-layers.sh  or set manually:
-    #   commit: <40-char-sha>
-    commit: HEAD
+    # Pin to a specific commit (issue #22).  Replace with the latest
+    # known-good SHA after a 'make build rpi5' end-to-end run; do not
+    # leave as HEAD — that breaks reproducibility (§1, ISO 26262).
+    # Update via: scripts/pin-layers.sh
+    commit: b56134ff90dec996e8aae45ed7e6ad6b1d5a84a0
     path: layers/poky
     layers:
       meta:
