@@ -794,3 +794,84 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   outside any function).**  bats runs gather at parse time,
   before any test's `setup()` has run, so `${BIN}` and `${TMP}`
   are unset.  All stub installation belongs in `setup()`.
+
+## C11 — Issue #28 first-boot partition resize race: lessons learned (2026-06-10)
+
+**Do**
+- **Audit every `IMAGE_INSTALL` line before assuming a recipe
+  ships.**  `grep -rn 'expand-rootfs' meta/meta-acadia/recipes-core/images/`
+  showed zero matches — the `expand-rootfs.service` was never
+  installed into the image.  The race was theoretical on RPi 5
+  but a "no-op service that does resize" left in the tree is a
+  trap: the next contributor who adds it to `IMAGE_INSTALL`
+  (or fixes the broken RDEPENDS chain) silently re-introduces
+  the corruption path.  Delete dead recipes entirely; don't
+  "slim them down to no-op".
+- **Pick a single canonical resizer; everything else uses
+  `--fixed-size`.**  The WKS comment already said "p4 → grows
+  to fill card on first boot via rpi5-home-init" — that
+  comment was the spec.  The fix was to make `rpi5-home-init`
+  the only service that calls `parted resizepart` and to
+  document that as a static invariant in a test.  When two
+  services both target `100%` of the disk, you have a race;
+  when one does, you have a sequence.
+- **Bump WKS fixed-sizes, not "grow-to-fill", when the rootfs
+  grows past the current fixed-size.**  The gRPC + SWUpdate +
+  dashboard stack exceeds 8 GB, so p2/p3 had to go to 16G.
+  Reserving 16G × 2 = 32G for the A/B slots is fine on a
+  64GB+ card; on a 32GB card the user gets less /home, but
+  the system still boots.  Grow-to-fill is for the *last*
+  partition, where the "rest of the disk" is unambiguous.
+- **Compute `META_ACADIA` once at the top of the test, then
+  derive siblings from it.**  The test file lives at
+  `meta-acadia/recipes-core/<recipe>/tests/`, so
+  `${BATS_TEST_DIRNAME}/../../..` is `meta-acadia/` — from
+  there, `wic/` and `recipes-support/` are siblings of
+  `recipes-core/`.  The earlier C9 lesson was about not
+  using `../files/...` (one segment too few); the C11 lesson
+  is "use `BATS_TEST_DIRNAME` + a constant up-count, not a
+  hard-coded `$(git rev-parse --show-toplevel)`".  A bats
+  test that runs on a CI checkout *and* a dev worktree needs
+  to be path-portable.
+- **Walk the whole tree in a static regression test, not
+  just the file under test.**  Test 1 in
+  `test_partition_race.bats` greps
+  `${META_ACADIA}/recipes-core` AND
+  `${META_ACADIA}/recipes-support` for any
+  `parted resizepart` call.  Catching a regression in *any*
+  script is the whole point — a test that only inspects
+  `rpi5-home-init.sh` wouldn't catch a future
+  `recipes-support/foo/foo.sh` re-introducing the race.
+
+**Don't**
+- **Don't keep a recipe that has no IMAGE_INSTALL and no
+  RDEPENDS chain.**  It's dead code.  The temptation is to
+  leave it for "future use"; the cost is that it sits in
+  `git log` as a discoverable pattern, and the next
+  contributor either (a) wires it up without realising the
+  race it creates, or (b) deletes the wrong files when
+  cleaning up.  `grep -rn '<name>' --include='*.bb' \
+  --include='*.bbappend' --include='*.conf' --include='*.yaml' \
+  --include='*.wks'` — if the only matches are the recipe's
+  own files, it's dead.
+- **Don't try to "coordinate" two services that both want
+  100% of the disk.**  systemd `Before=`/`After=` only orders
+  start; it does not prevent partition-table corruption if
+  both services succeed in their own step.  The correct
+  fix is "one service does the resize, the other doesn't
+  exist" — not "both run, in order".
+- **Don't write a test that grep-asserts on a literal
+  comment that quotes the old behaviour.**  Same as C9: the
+  WKS comment block is *documentation*, not a regression.
+  The grep anchors here are on `--fixed-size` and the
+  absence of `--size 100%`, both of which are syntactic
+  and not paraphrased in comments.
+- **Don't `skip` a test just because a guard var is unset —
+  set the guard, then run the test.**  The first run of
+  `test_partition_race.bats` skipped 7/7 tests because the
+  WKS path math was one segment too many.  `setup()` should
+  set the variables the test needs; the test body should
+  not skip unless the file genuinely doesn't exist in *any*
+  checkout.  A skip is a signal "this checkout is
+  unexpected"; a fail is a signal "the test is broken".  If
+  the test is broken, fix it; don't paper over with skip.
