@@ -5,8 +5,9 @@ repos:
   meta-openembedded:
     url: https://github.com/openembedded/meta-openembedded
     branch: scarthgap
-    # TODO: pin to a specific commit — run scripts/pin-layers.sh
-    commit: HEAD
+    # Pin to a specific commit (issue #23).  Update via scripts/pin-layers.sh
+    # after a 'make build rpi5' end-to-end run validates the new SHA.
+    commit: d8cc4e44001c7257273d290ce8c4496e93d32841
     path: layers/meta-openembedded
     layers:
       meta-oe:
