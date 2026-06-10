@@ -15,14 +15,16 @@ fi
 ROOT_DEV=$(findmnt -n -o SOURCE /)
 ROOT_DEV_NAME="${ROOT_DEV#/dev/}"
 
-if [[ "$ROOT_DEV_NAME" =~ ^(mmcblk[0-9]+)p([0-9]+)$ ]]; then
-    DISK_NAME="${BASH_REMATCH[1]}"
-    PART_NUM="${BASH_REMATCH[2]}"
-elif [[ "$ROOT_DEV_NAME" =~ ^([a-z]+)([0-9]+)$ ]]; then
-    DISK_NAME="${BASH_REMATCH[1]}"
-    PART_NUM="${BASH_REMATCH[2]}"
-else
-    echo "expand-rootfs: cannot parse device '$ROOT_DEV', aborting." >&2
+# Issue #42: regex-parsing the device name fails on NVMe
+# (nvme0n1p2 — second regex captures (nvme, 0) — wrong disk,
+# wrong partition).  Use the same lsblk + /sys/class/block
+# pattern as rpi5-home-init.sh: that's portable across mmcblk,
+# nvme, sd, vd, and any future block device type.
+DISK_NAME=$(lsblk -ndo PKNAME "${ROOT_DEV}" 2>/dev/null || true)
+PART_NUM=$(cat "/sys/class/block/${ROOT_DEV_NAME}/partition" 2>/dev/null || true)
+
+if [[ -z "${DISK_NAME}" || -z "${PART_NUM}" ]]; then
+    echo "expand-rootfs: cannot determine parent disk for '$ROOT_DEV', aborting." >&2
     exit 1
 fi
 
