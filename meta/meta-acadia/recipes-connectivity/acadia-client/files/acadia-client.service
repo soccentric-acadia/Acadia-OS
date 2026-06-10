@@ -2,6 +2,14 @@
 Description=Acadia Client — gRPC daemon for IV&V hardware validation
 After=network-online.target var-lib-acadia.mount
 Wants=network-online.target var-lib-acadia.mount
+# Issue #46: Requires= (not just Wants=) so the daemon cannot start
+# without the bind-mount being active.  Wants= is a soft preference;
+# if the mount fails (e.g. /home not mounted rw, /home/acadia missing
+# after a fresh flash), the daemon starts anyway and writes to the
+# rootfs /var/lib/acadia path — which the next OTA wipe destroys.
+# Requires= turns "silent data loss on the wrong filesystem" into
+# "loud start failure with a clear journal message".
+Requires=var-lib-acadia.mount
 
 [Service]
 Type=simple

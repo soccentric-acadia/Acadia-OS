@@ -3,6 +3,15 @@ Description=Bind-mount /home/acadia to /var/lib/acadia for Acadia-Client
 DefaultDependencies=no
 After=local-fs.target acadia-data-init.service
 Before=acadia-client.service
+# Issue #46: BindsTo (not just After=) so systemd automatically stops
+# and restarts this mount if acadia-data-init.service fails.  After=
+# alone only orders start; if the init service fails AFTER the mount
+# is up (e.g. a follow-up ExecStart= in init fails), the bind is left
+# in place but stale.  BindsTo ties the lifetime of the two units
+# together: init dies → mount dies, and the client (which Requires=
+# this mount) dies too.  Silent data loss to rootfs is no longer
+# possible because the client cannot start without the bind.
+BindsTo=acadia-data-init.service
 
 [Mount]
 What=/home/acadia
