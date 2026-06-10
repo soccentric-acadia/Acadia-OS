@@ -12,12 +12,12 @@ IMAGE_INSTALL:append = " rpi5-home-init"
 # Connectivity — Ethernet DHCP, WiFi (wpa_supplicant), Bluetooth
 # linux-firmware-rpidistro is pulled in by meta-raspberrypi MACHINE_EXTRA_RRECOMMENDS
 # but we declare the tools explicitly for clarity.
+# rpi5-connectivity already pulls wpa-supplicant + bluez5 via RDEPENDS;
+# do not re-list them (issue #53).
 IMAGE_INSTALL:append = " \
     rpi5-connectivity \
-    wpa-supplicant \
     iw \
     rfkill \
-    bluez5 \
     bluez5-dev \
 "
 

@@ -13,8 +13,11 @@ SRC_URI = " \
     file://80-rpi5-connectivity.preset \
 "
 
-# wpa-supplicant and bluez5 must be present for the preset to enable them
-RDEPENDS:${PN} = "wpa-supplicant bluez5"
+# wpa-supplicant and bluez5 must be present for the preset to enable them.
+# systemd-resolved provides the /run/systemd/resolve/stub-resolv.conf target
+# of the /etc/resolv.conf symlink below — without it, resolv.conf is a
+# dangling symlink at boot (issue #43).
+RDEPENDS:${PN} = "wpa-supplicant bluez5 systemd-resolved"
 
 do_install() {
     # ── systemd-networkd network/netdev files ─────────────────────────────────

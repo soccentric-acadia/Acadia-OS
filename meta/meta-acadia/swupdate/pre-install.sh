@@ -27,11 +27,6 @@ esac
 
 echo "[swupdate pre-install] target slot: ${INACTIVE_SLOT} (${INACTIVE_DEV})"
 
-# Ensure the inactive partition is not mounted
-if mountpoint -q /mnt/rootfs-inactive 2>/dev/null; then
-    umount /mnt/rootfs-inactive
-fi
-
 # Backup kernel and DTB so boot-watchdog / bootcheck can restore them on rollback
 mount -o remount,rw /boot
 for f in kernel_2712.img bcm2712-rpi-5-b.dtb; do

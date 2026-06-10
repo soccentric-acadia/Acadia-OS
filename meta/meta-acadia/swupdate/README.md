@@ -24,10 +24,10 @@
 │                  Raspberry Pi 5  256 GB SD card                      │
 │                                                                      │
 │  ┌──────────┐  ┌────────────────┐  ┌────────────────┐  ┌──────────┐ │
-│  │  p1/boot │  │  p2/rootfs-a   │  │  p3/rootfs-b   │  │  p4/data │ │
+│  │  p1/boot │  │  p2/rootfs-a   │  │  p3/rootfs-b   │  │  p4/home │ │
 │  │  256 MB  │  │    8192 MB     │  │    8192 MB     │  │  ~238 GB │ │
 │  │  FAT32   │  │    ext4        │  │    ext4        │  │   ext4   │ │
-│  │          │  │  ← active →    │  │  ← standby →   │  │  /data   │ │
+│  │          │  │  ← active →    │  │  ← standby →   │  │  /home   │ │
 │  └──────────┘  └────────────────┘  └────────────────┘  └──────────┘ │
 │       │                ▲                    ▲                        │
 │  cmdline.txt      root=PARTUUID=…       written by                   │
@@ -50,9 +50,12 @@ root=PARTUUID=<uuid-of-active-slot> ...
 `post-install.sh` atomically rewrites that `root=` parameter to point at the
 newly written slot, then the device reboots into it.
 
-The `/data` partition (p4) is **never touched** by an OTA update. Mount it at
-`/data` (or add an fstab entry) for anything that must survive updates: config
-files, application state, certificates, logs.
+The `/home` partition (p4) is **never touched** by an OTA update. The
+`rpi5-home-init.service` unit creates `/home/rpi` (matching the in-rootfs
+skeleton) and copies `/etc/skel` into it on first boot. Anything that must
+survive updates — config files, application state, certificates, logs —
+should live under `/home/<user>/` or `/home/acadia/` (the Acadia service
+account's persistent data directory).
 
 ---
 
@@ -63,7 +66,7 @@ files, application state, certificates, logs.
 | p1 | `boot` | 256 MB | FAT32 | `/boot` | Firmware, kernel, DTBs, overlays, `cmdline.txt` |
 | p2 | `rootfs-a` | 8192 MB | ext4 | `/` | Root filesystem — Slot A (active after factory flash) |
 | p3 | `rootfs-b` | 8192 MB | ext4 | *(none)* | Root filesystem — Slot B (standby, target of next OTA) |
-| p4 | `data` | ~238 GB (rest of card) | ext4 | `/data` | Persistent user / application data |
+| p4 | `home` | ~238 GB (rest of card) | ext4 | `/home` | Persistent user / application data |
 
 ---
 
@@ -111,7 +114,7 @@ Upload rpi5-1.2.3.swu  ──────────────────►
 ## File Map
 
 ```
-meta/meta-custom/
+meta/meta-acadia/
 ├── swupdate/                          ← .swu packaging sources (host-side)
 │   ├── sw-description                 Template; @@VERSION@@ substituted by make swu
 │   ├── pre-install.sh                 Copied verbatim into every .swu
@@ -158,7 +161,7 @@ The output is written to `build/rpi5-<version>.swu`.
 
 1. Finds the latest `*.rootfs.ext4` in `build/tmp/deploy/images/raspberrypi5/`.
 2. gzip-compresses it to `build/swu/rootfs.ext4.gz`.
-3. Substitutes `@@VERSION@@` in `meta/meta-custom/swupdate/sw-description` → `build/swu/sw-description`.
+3. Substitutes `@@VERSION@@` in `meta/meta-acadia/swupdate/sw-description` → `build/swu/sw-description`.
 4. Copies `pre-install.sh` and `post-install.sh` into `build/swu/`.
 5. Packs the four files in the required cpio order:
    ```
@@ -354,7 +357,7 @@ To add automatic rollback, a typical approach is:
 
 ### Partial update (config files only, no rootfs flash)
 
-Edit `meta/meta-custom/swupdate/sw-description` — remove the `images:` block,
+Edit `meta/meta-acadia/swupdate/sw-description` — remove the `images:` block,
 keep only the `scripts:` block, and add a `files:` section:
 
 ```
