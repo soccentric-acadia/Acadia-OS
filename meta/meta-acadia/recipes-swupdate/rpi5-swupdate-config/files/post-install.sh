@@ -48,9 +48,20 @@ echo "[swupdate post-install] boot_state written (slot=${TARGET_SLOT} tries=3)"
 # Boards using U-Boot (CM1, CM3, etc.) will have fw_setenv and benefit
 # from the full U-Boot rollback mechanism.
 if command -v fw_setenv &>/dev/null; then
-    fw_setenv upgrade_available 1
-    fw_setenv bootcount 0
-    fw_setenv bootlimit 3
+    # Each call wrapped in `||` + a logger line so a corrupt or
+    # read-only U-Boot env produces a visible journal entry, not a
+    # silent abort (issue #50).  bootcount-reset.service depends on
+    # upgrade_available=1 being set, so this branch must succeed or
+    # the rollback chain silently regresses.
+    fw_setenv upgrade_available 1 \
+        || logger -t swupdate-post-install \
+              "ERROR: fw_setenv upgrade_available 1 failed — U-Boot env may be read-only or corrupt"
+    fw_setenv bootcount 0 \
+        || logger -t swupdate-post-install \
+              "ERROR: fw_setenv bootcount 0 failed — U-Boot env may be read-only or corrupt"
+    fw_setenv bootlimit 3 \
+        || logger -t swupdate-post-install \
+              "ERROR: fw_setenv bootlimit 3 failed — U-Boot env may be read-only or corrupt"
     echo "[swupdate post-install] U-Boot env: upgrade_available=1 bootcount=0 bootlimit=3"
 else
     echo "[swupdate post-install] fw_setenv not available — relying on RPi firmware tryboot"
