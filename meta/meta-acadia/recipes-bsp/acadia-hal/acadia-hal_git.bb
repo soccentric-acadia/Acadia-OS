@@ -66,6 +66,12 @@ CXXFLAGS:append = " -Wno-error=unused-result"
 LDFLAGS:append = " -Wl,--copy-dt-needed-entries"
 
 # The upstream CMakeLists.txt has no install() rules; install artifacts manually.
+# Issue #58: the previous find -o expression on the headers line was
+# missing parentheses, so -o bound to the preceding -name rather than
+# to the *next* -name.  The result was that only *.h was matched and
+# *.hpp files were silently dropped from the dev package.  The
+# upstream CMakeLists install-rules patch (issue #48 follow-up)
+# would let us drop this loop entirely and call oe_runmake install.
 do_install() {
     # Shared libraries → runtime package
     install -d ${D}${libdir}
@@ -79,10 +85,14 @@ do_install() {
     find ${B}/bin -maxdepth 1 -type f -exec install -m 0755 {} ${D}${bindir}/ \;
 
     # Public headers → dev package
+    # Parens around the -o group are required: -o binds tighter to
+    # the *preceding* -name than the *following* -name, so without
+    # parens only *.h is matched.  Use -print0 / xargs -0 to handle
+    # header paths with spaces or quotes (defensive — none today,
+    # but upstream layout can change).
     install -d ${D}${includedir}/${PN}
-    find ${S}/src -name "*.h" -o -name "*.hpp" | while read f; do
-        install -m 0644 "$f" ${D}${includedir}/${PN}/
-    done
+    find ${S}/src \( -name "*.h" -o -name "*.hpp" \) -print0 \
+        | xargs -0 -I {} install -m 0644 {} ${D}${includedir}/${PN}/
 
     # Issue #47: install the security policy doc into /usr/share/doc
     # so an operator reading 'dpkg -L acadia-hal' (or rpm -ql) sees it.
