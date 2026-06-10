@@ -547,3 +547,55 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   This entry is for #31. After C1/C2/C3/C4 the pattern is clear:
   every fix has a "what surprised me" lesson worth keeping. Skip
   this and the next contributor repeats the mistake.
+
+## C5 — Issue #26 swupdate-bootcheck size bounds: lessons learned (2026-06-10)
+
+**Do**
+- **Per-file size bounds require a `case` block, not a shared `||`.**
+  A health check that always reports unhealthy is worse than no
+  health check — the DTB-always-fails-1MB-gate bug went unnoticed
+  for the entire C1 cycle because the symptom was "OTA always
+  rolls back on first boot", which is a plausible misdiagnosis
+  for the rest of the rollback chain. The fix is a per-file
+  `case "${f}" in kernel_*) ... ;; *-rpi-*-b.dtb) ... ;; esac`
+  with explicit min/max per family, plus a generic `*)` fallback
+  that *warns* (not fails) so a new SoC's filename doesn't
+  silently break rollback.
+- **Inline the test logic from the production script.** Both
+  `swupdate-bootcheck.sh` and `boot-watchdog.sh` carry the same
+  `case` block. `tests/test_size_bounds.bats` copies it inline
+  and exercises 7 cases (healthy kernel, healthy DTB, zero-byte
+  kernel, too-small DTB, oversize kernel, oversize DTB, RPi 4
+  DTB wildcard). When the production case changes, the test
+  must change in the same commit.
+- **Test the bounds via a per-test fixture, not a shared setup.**
+  Earlier drafts created a 7 MB kernel and 60 KB DTB in
+  `setup()` and then had the oversize tests overwrite them —
+  fragile. Each `@test` now creates the file it needs with
+  `dd`, and `teardown()` cleans the tempdir.  One file, one
+  assertion, one fixture.
+
+**Don't**
+- **Don't pass a full path into a `case` block that expects the
+  basename.** `case "${f}" in kernel_2712.img)` is a literal
+  match — `case "/tmp/foo/kernel_2712.img"` falls through to
+  the generic `*)` branch with the wider 50 MB upper bound, so
+  a 26 MB "kernel" passes silently. The production code is
+  correct because it iterates `for f in kernel_2712.img ...`
+  and uses `${f}` (basename) for `case` and `/boot/${f}` for
+  `stat`. When inlining into a test, mirror that split: the
+  function takes a basename, the function uses `${TMP}/${f}`
+  for the `stat` call.
+- **Don't share a single 1 MB / 10 MB bound across kernel and
+  DTB.** This is the bug; repeating it here so the next
+  contributor sees it. kernel_2712.img is 7-15 MB.
+  bcm2712-rpi-5-b.dtb is 50-80 KB. The 1 MB gate excludes
+  every DTB; the 10 MB ceiling excludes every RPi 5 kernel.
+  Both ranges are wrong; per-file is the only correct answer.
+- **Don't ship a health check that emits only a `logger` line
+  on failure.** A `WARN: kernel size outside [1MB, 10MB]`
+  log line is invisible in a CI pipeline that doesn't
+  journal-persist. The fix is to set `HEALTH_OK=false` *and*
+  continue iterating (the existing `break` is correct) so
+  the rollback path runs immediately. A logged warning
+  without an action is just noise.
