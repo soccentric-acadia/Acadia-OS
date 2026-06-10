@@ -19,7 +19,23 @@ if [[ ! -f "${BOOT_STATE}" ]]; then
     exit 0
 fi
 
-source "${BOOT_STATE}"    # imports slot, tries_remaining, confirmed
+# Parse /boot/boot_state as key=value lines.  We deliberately do NOT `source`
+# the file: /boot is a FAT32 partition (world-readable from the running
+# system).  A `source` on the file would execute any shell metacharacters
+# an attacker writes into it — running arbitrary code as root from a
+# writable mount.  A read loop assigns values without ever evaluating
+# them, and tolerates a corrupt or stale boot_state file.
+slot=""
+tries_remaining=""
+confirmed=""
+while IFS='=' read -r key value; do
+    case "${key}" in
+        slot)            slot="${value}" ;;
+        tries_remaining) tries_remaining="${value}" ;;
+        confirmed)       confirmed="${value}" ;;
+        \#*|"")          : ;;            # comment / blank line
+    esac
+done < "${BOOT_STATE}"
 
 # Already confirmed by a previous run
 if [[ "${confirmed:-false}" == "true" ]]; then

@@ -38,7 +38,20 @@ if [[ ! -f "${BOOT_STATE}" ]]; then
     exit 0
 fi
 
-source "${BOOT_STATE}"          # imports slot, tries_remaining, confirmed
+# Parse /boot/boot_state as key=value lines.  Do NOT `source`: /boot is
+# writable (FAT32), and a `source` would execute any shell metacharacters
+# an attacker wrote into the file — running arbitrary code as root.
+slot=""
+tries_remaining=""
+confirmed=""
+while IFS='=' read -r key value; do
+    case "${key}" in
+        slot)            slot="${value}" ;;
+        tries_remaining) tries_remaining="${value}" ;;
+        confirmed)       confirmed="${value}" ;;
+        \#*|"")          : ;;
+    esac
+done < "${BOOT_STATE}"
 
 if [[ "${confirmed:-false}" == "true" ]]; then
     exit 0
