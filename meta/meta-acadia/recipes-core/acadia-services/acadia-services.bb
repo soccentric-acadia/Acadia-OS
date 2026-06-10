@@ -11,6 +11,13 @@ SRC_URI = " \
 
 inherit allarch systemd
 
+# systemd-cat is in the systemd package; dmesg is in util-linux.
+# Both are pulled in by core-image-full-cmdline, but be explicit
+# so this recipe is portable to images that might not include them
+# (issue #56 regression — dmesg-capture.service now pipes to
+# systemd-cat instead of writing to volatile /var/log/).
+RDEPENDS:${PN} = "systemd util-linux"
+
 SYSTEMD_SERVICE:${PN} = " \
     dmesg-capture.service \
     disk-usage-check.service \
