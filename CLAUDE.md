@@ -794,3 +794,65 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   outside any function).**  bats runs gather at parse time,
   before any test's `setup()` has run, so `${BIN}` and `${TMP}`
   are unset.  All stub installation belongs in `setup()`.
+
+## C10 — Issue #42 expand-rootfs portable device resolution: lessons learned (2026-06-10)
+
+**Do**
+- **Translate the path *into* the stub, not the path the stub
+  matches on.**  The production script calls `cat
+  /sys/class/block/<dev>/partition` (the literal real path).
+  The earlier draft of the bats stub matched on `${SYS}/*` and
+  relied on the script being rewritten to use the temp path —
+  but the production script is correct and shouldn't change.
+  The fix is the stub: case-match `/sys/class/block/*` and
+  rewrite to `${SYS}${arg#/sys}`.  Same pattern for any
+  privileged-path substitution in a test.
+- **Run the production snippet *verbatim* in the test
+  function.**  `resolve_disk_and_part()` in the test is a
+  literal copy of `expand-rootfs.sh` lines 14-29.  If the
+  production code changes, this function changes in the same
+  commit — the comment says so explicitly.  Inline copy >
+  factored library for one-line tests; the duplication is the
+  contract.
+- **Anchor grep tests on the *call shape*, not just keywords.**
+  `grep -qE '^[[:space:]]*DISK_NAME=\$\(lsblk[[:space:]]+(-ndo|-no)'`
+  catches a regression to the regex parser even if the
+  variable name is the same.  The `\$` escape is the difference
+  between "literal $( in the source" and "command substitution
+  happening at grep time" — easy to get wrong, the
+  pre-quoted version silently matches the wrong thing.
+- **`lsblk -ndo PKNAME <dev>` + `cat /sys/class/block/<dev>/partition`
+  is the portable pattern across mmcblk / nvme / sd / vd.**
+  Don't regex-parse the device name.  The same pattern in
+  `rpi5-home-init.sh` (resolved under issue #30) — when
+  adding first-boot scripts, copy that resolution block
+  verbatim, don't reinvent it.
+
+**Don't**
+- **Don't have a cat stub match on `${SYS}/*` when the
+  production script passes `/sys/class/block/...` to cat.**
+  The case never matches, the stub falls through to
+  `exec /usr/bin/cat "$@"`, and the test silently reads
+  the *real* `/sys/class/block/...` (which doesn't exist in
+  CI).  The error message you see is from `/bin/cat`, not
+  your stub — the giveaway is "STUB CALLED" never appearing
+  in the trace.  Translate paths in the stub, not in the SUT.
+- **Don't write a bats test that `set -e` aborts before the
+  stub is set up.**  The `setup()` block has `[ -f "${SUT}" ]
+  || skip` to guard against missing SUT — but if you put the
+  stub installation outside `setup()`, the test runs in an
+  empty PATH and silently no-ops.  Always combine the stub
+  install + the SUT-resolution in `setup()`.
+- **Don't trust the `lsblk` stub echo unconditionally.**
+  `[ -n "${pkname}" ] && echo "${pkname}"` is correct, but
+  the negation (empty lsblk → empty result) needs an
+  explicit test.  Test 9 (`lsblk empty + no sysfs file → exit 1`)
+  is the one that catches a "default to disk=root" silent
+  regression — without it, the script would proceed to
+  `parted /dev/ resizepart '' 100%` with a confusing error.
+- **Don't forget to rebase onto `origin/develop` and re-run
+  tests *after* the squash-merge.**  The C3 / C9 lessons
+  apply here too: this branch was already up-to-date with
+  develop, but the rule is "rebase + re-validate" every
+  time, even when the rebase is a no-op.  Skipping it is
+  how a stale snapshot of develop ships in a PR.
