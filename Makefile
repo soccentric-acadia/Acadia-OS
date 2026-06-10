@@ -13,8 +13,13 @@ KAS_VERSION      ?= 4.5
 # Yocto image recipe built by build / sdk / esdk / rebuild-image targets
 IMAGE_TARGET     ?= acadia-image
 
-# OTA package version (overridable: make swu SWU_VERSION=1.2.3)
-SWU_VERSION      ?= $(shell date +%Y%m%d%H%M)
+# OTA package version.  If the user passes SWU_VERSION=… on the command
+# line, use it verbatim; otherwise default to the same timestamp as
+# DEPLOY_TS so the .swu filename and its deploy dir always match.
+# `:=` (immediate) is intentional — it captures the value at parse
+# time, so a single `make` invocation cannot re-evaluate it after
+# sub-shells that touch the clock.  See issue #40.
+SWU_VERSION      ?= $(DEPLOY_TS)
 
 # --- Positional board argument -----------------------------------------------
 # The board name is typed directly after the target — no BOARD= needed:
@@ -26,8 +31,19 @@ SWU_VERSION      ?= $(shell date +%Y%m%d%H%M)
 # definitions so those variables are derived from the correct board name.
 _BOARD_TARGETS := image build rebuild-image sdk esdk sdk-image esdk-image shell swu flash
 
-ifneq ($(filter $(_BOARD_TARGETS),$(firstword $(MAKECMDGOALS))),)
+# `make image rpi5 SWU_VERSION=1.2.3` puts 'SWU_VERSION=1.2.3' in
+# MAKECMDGOALS (it's a make-assignment, not an option).  Filter those
+# out before testing for the board name — issue #64.  An assignment
+# token is the only one that contains '='.
+_NON_ASSIGN_GOALS := $(filter-out %=,$(_BOARD_TARGETS))
+
+ifneq ($(filter $(_NON_ASSIGN_GOALS),$(firstword $(MAKECMDGOALS))),)
   _BOARD_ARG := $(word 2,$(MAKECMDGOALS))
+  # If the user wrote `make image SWU_VERSION=1.2.3` (no board), the
+  # second word is the assignment; skip — the default BOARD applies.
+  ifneq ($(filter %=,$(_BOARD_ARG)),)
+    _BOARD_ARG :=
+  endif
   ifneq ($(_BOARD_ARG),)
     # Only apply when BOARD was not explicitly set on the command line
     ifeq ($(origin BOARD),undefined)
@@ -48,6 +64,48 @@ KAS_CONFIG       := kas/boards/$(BOARD).yaml
 
 # Derive MACHINE automatically from the kas yaml
 MACHINE          := $(shell grep '^machine:' $(KAS_CONFIG) 2>/dev/null | awk '{print $$2}')
+
+# --- Per-board kernel/DTB filenames (issue #63) -----------------------------
+# 'make swu' must copy the kernel and DTB into the .swu package so the
+# OTA flow can update them — but the names differ by SoC:
+#
+#   SoC    Board             Kernel                  DTB
+#   ----   ----------------  ---------------------   --------------------------------
+#   2712   rpi5 / cm5        kernel_2712.img        bcm2712-rpi-5-b.dtb
+#   2711   rpi4 / rpi4-64    kernel_2711.img        bcm2711-rpi-4-b.dtb
+#   2711   cm4               kernel_2711.img        bcm2711-rpi-cm4-io.dtb
+#   2710   rpi3 / rpi3-64    kernel_2710.img        bcm2710-rpi-3-b.dtb
+#   2708   rpi0 / rpi0-wifi  kernel.img             bcm2708-rpi-zero.dtb
+#
+# The .swu-build step below calls `find ... -name '$$SWU_KERNEL'`, so the
+# values here are patterns, not exact paths.  Override on the command line
+# for boards not in the table:
+#   make swu rpi4-64 SWU_KERNEL=kernel_2711.img SWU_DTB=bcm2711-rpi-4-b.dtb
+ifeq ($(BOARD),rpi5)
+  SWU_KERNEL ?= kernel_2712.img
+  SWU_DTB    ?= bcm2712-rpi-5-b.dtb
+else ifeq ($(BOARD),cm5)
+  SWU_KERNEL ?= kernel_2712.img
+  SWU_DTB    ?= bcm2712-rpi-5-b.dtb
+else ifeq ($(BOARD),cm4)
+  SWU_KERNEL ?= kernel_2711.img
+  SWU_DTB    ?= bcm2711-rpi-cm4-io.dtb
+else ifneq ($(filter rpi4%,$(BOARD)),)
+  SWU_KERNEL ?= kernel_2711.img
+  SWU_DTB    ?= bcm2711-rpi-4-b.dtb
+else ifneq ($(filter rpi3%,$(BOARD)),)
+  SWU_KERNEL ?= kernel_2710.img
+  SWU_DTB    ?= bcm2710-rpi-3-b.dtb
+else ifneq ($(filter rpi0%,$(BOARD)),)
+  SWU_KERNEL ?= kernel.img
+  SWU_DTB    ?= bcm2708-rpi-zero.dtb
+else ifeq ($(BOARD),rpi2)
+  SWU_KERNEL ?= kernel7.img
+  SWU_DTB    ?= bcm2709-rpi-2-b.dtb
+else ifeq ($(BOARD),rpi1)
+  SWU_KERNEL ?= kernel.img
+  SWU_DTB    ?= bcm2708-rpi-b.dtb
+endif
 
 # --- Directories -------------------------------------------------------------
 BUILD_DIR        ?= $(CURDIR)/build
@@ -127,6 +185,9 @@ kas-image:
 
 ## Build the KAS image only when it is absent (used internally by build/shell/sdk/esdk)
 ensure-image:
+	@command -v docker >/dev/null 2>&1 || { \
+	    echo "ERROR: 'docker' not found in PATH.  Install Docker (or set KAS_CONTAINER_ENGINE=podman)."; \
+	    exit 1; }
 	@docker image inspect $(KAS_IMAGE) >/dev/null 2>&1 \
 	    || { echo "KAS image $(KAS_IMAGE) not found — building ..."; \
 	         $(MAKE) kas-image; }
@@ -215,12 +276,18 @@ esdk-image: ensure-image kas-container-script
 
 ## Build the SDK Docker image only when it is absent
 ensure-sdk-image:
+	@command -v docker >/dev/null 2>&1 || { \
+	    echo "ERROR: 'docker' not found in PATH.  Install Docker (or set KAS_CONTAINER_ENGINE=podman)."; \
+	    exit 1; }
 	@docker image inspect $(SDK_IMAGE) >/dev/null 2>&1 \
 	    || { echo "SDK image $(SDK_IMAGE) not found — running full sdk-image chain ..."; \
 	         $(MAKE) sdk-image; }
 
 ## Build the eSDK Docker image only when it is absent
 ensure-esdk-image:
+	@command -v docker >/dev/null 2>&1 || { \
+	    echo "ERROR: 'docker' not found in PATH.  Install Docker (or set KAS_CONTAINER_ENGINE=podman)."; \
+	    exit 1; }
 	@docker image inspect $(ESDK_IMAGE) >/dev/null 2>&1 \
 	    || { echo "eSDK image $(ESDK_IMAGE) not found — running full esdk-image chain ..."; \
 	         $(MAKE) esdk-image; }
@@ -275,16 +342,18 @@ swu: build
 	@gzip -kfc "$(ROOTFS)" > "$(BUILD_DIR)/swu/rootfs.ext4.gz"
 
 	# --- kernel + DTB (required for I3: kernel/DTB included in OTA) ---
+	# Filenames are board-specific (see SWU_KERNEL / SWU_DTB table at
+	# top of file).  Issue #63.
 	$(eval KERNEL := $(shell find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \
-	    -name "kernel_2712.img" 2>/dev/null | sort -V | tail -1))
+	    -name "$(SWU_KERNEL)" 2>/dev/null | sort -V | tail -1))
 	$(eval DTB := $(shell find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \
-	    -name "bcm2712-rpi-5-b.dtb" 2>/dev/null | sort -V | tail -1))
+	    -name "$(SWU_DTB)" 2>/dev/null | sort -V | tail -1))
 	@test -n "$(KERNEL)" || \
-	    { echo "WARNING: kernel_2712.img not found — kernel will not be updated in this .swu"; }
+	    { echo "WARNING: $(SWU_KERNEL) not found — kernel will not be updated in this .swu"; }
 	@test -n "$(DTB)" || \
-	    { echo "WARNING: bcm2712-rpi-5-b.dtb not found — DTB will not be updated in this .swu"; }
-	@[ -n "$(KERNEL)" ] && cp "$(KERNEL)" "$(BUILD_DIR)/swu/kernel_2712.img" || true
-	@[ -n "$(DTB)" ]    && cp "$(DTB)"    "$(BUILD_DIR)/swu/bcm2712-rpi-5-b.dtb" || true
+	    { echo "WARNING: $(SWU_DTB) not found — DTB will not be updated in this .swu"; }
+	@[ -n "$(KERNEL)" ] && cp "$(KERNEL)" "$(BUILD_DIR)/swu/$(SWU_KERNEL)" || true
+	@[ -n "$(DTB)" ]    && cp "$(DTB)"    "$(BUILD_DIR)/swu/$(SWU_DTB)" || true
 
 	# --- sw-description ---
 	@sed "s|@@VERSION@@|$(SWU_VERSION)|" \
@@ -302,12 +371,12 @@ swu: build
 	        "$(BUILD_DIR)/swu/sw-description"; \
 	    echo "Packing SIGNED .swu ..."; \
 	    cd "$(BUILD_DIR)/swu" && \
-	        printf 'sw-description\nsw-description.sig\npre-install.sh\npost-install.sh\nrootfs.ext4.gz\nkernel_2712.img\nbcm2712-rpi-5-b.dtb\n' | \
+	        printf 'sw-description\nsw-description.sig\npre-install.sh\npost-install.sh\nrootfs.ext4.gz\n$(SWU_KERNEL)\n$(SWU_DTB)\n' | \
 	        cpio -ov -H newc > "$(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu"; \
 	else \
 	    echo "WARNING: No private key found — packing UNSIGNED .swu (run scripts/generate-swu-keys.sh to enable signing)"; \
 	    cd "$(BUILD_DIR)/swu" && \
-	        printf 'sw-description\npre-install.sh\npost-install.sh\nrootfs.ext4.gz\nkernel_2712.img\nbcm2712-rpi-5-b.dtb\n' | \
+	        printf 'sw-description\npre-install.sh\npost-install.sh\nrootfs.ext4.gz\n$(SWU_KERNEL)\n$(SWU_DTB)\n' | \
 	        cpio -ov -H newc > "$(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu"; \
 	fi
 	@echo "OTA package: $(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu"
