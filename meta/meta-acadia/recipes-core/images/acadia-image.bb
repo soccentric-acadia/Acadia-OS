@@ -16,8 +16,10 @@ IMAGE_INSTALL:append = " swupdate swupdate-www rpi5-swupdate-config"
 IMAGE_INSTALL:append = " rpi5-home-init"
 
 # Connectivity
+# rpi5-connectivity already pulls wpa-supplicant + bluez5 via RDEPENDS
+# (issue #53); list only the tools the user might use directly.
 IMAGE_INSTALL:append = " \
-    rpi5-connectivity wpa-supplicant iw rfkill bluez5 bluez5-dev \
+    rpi5-connectivity iw rfkill bluez5-dev \
 "
 
 # gRPC + Protobuf (NO compiler on device — M5)
