@@ -500,3 +500,50 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   the 4–5 historical commits in develop are no longer reachable.
   `git rebase origin/develop` linearizes — do it in the same
   session as the squash-merge, before opening the next issue.
+## C4 — Issue #31 swupdate-webui-auth-init.sh: lessons learned (2026-06-10)
+
+**Do**
+- **Distinguish legitimate reveal channels from log channels.** The
+  generated web-UI password *must* go to `/dev/console` (the operator
+  has no other way to learn it on first boot), but the systemd
+  journal is a *log* — anyone in the `systemd-journal` group can
+  read it. Always write secrets to the one channel the operator is
+  physically present at; never to a system-wide log.
+- **Mock all external commands in bats tests.** `openssl`, `md5sum`,
+  `install`, `logger`, the journal sink, and `/dev/console` all
+  need stubs in `${BIN}` with `${BIN}` prepended to `${PATH}`. The
+  recipe's `RDEPENDS` proves the real binaries exist on target, so
+  the test only has to prove the script's logic.
+- **Test the regression in BOTH directions.** Test 4
+  ("plaintext password IS in /dev/console") exists to catch the
+  opposite regression — removing the console echo would lock the
+  operator out. A security fix that disables the legitimate channel
+  is also a bug.
+- **Use `sed` to redirect hardcoded device paths in the SUT.** The
+  script hardcodes `PASSWD_FILE=/etc/swupdate/...` and
+  `> /dev/console`. In the test, `sed` rewrites both to
+  `${PASSWD_FILE}` and `${CONSOLE_LOG}` so the script runs
+  unprivileged on a host with no systemd. The original file is
+  read-only; the test gets a transformed copy in `${TMP}`.
+
+**Don't**
+- **Don't use `$'...'` strings with embedded `\n` to construct
+  multi-line console banners.** `printf '%s' "${MSG}"` does NOT
+  expand the `$'...'` escapes — the literal `\n` characters end
+  up in the output. Use `printf '...\n'` per line, or `{ printf ...;
+  printf ...; } > /dev/console`.
+- **Don't assume `tr -d '=+/' | head -c 12` is 12 chars from the
+  input.** The 12-char truncation applies to the *post-tr* output.
+  If the input is base64 with `=` and `+`, those are stripped first,
+  then 12 chars are taken. Tests must work from the post-truncated
+  form, not the pre-truncation form.
+- **Don't merge locally before the PR is approved.** Use
+  `gh pr merge <N> --squash` (or `--merge` / `--rebase` per repo
+  convention). The fast-forward vs squash choice is a project
+  policy — match what was used last time. The merge being a
+  fast-forward here (vs squash for #69) is fine; the only invariant
+  is that `develop` ends up containing the change.
+- **Don't forget to record the Do/Don't for every completed issue.**
+  This entry is for #31. After C1/C2/C3/C4 the pattern is clear:
+  every fix has a "what surprised me" lesson worth keeping. Skip
+  this and the next contributor repeats the mistake.
