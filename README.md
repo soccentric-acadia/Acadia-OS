@@ -479,13 +479,16 @@ make clean-docker   # removes rpi5-kas, rpi5-sdk, and rpi5-esdk images
 
 ## First-Boot Services
 
-Two one-shot systemd services run on the very first boot:
+Three one-shot systemd units run on the very first boot:
 
 ### `rpi5-home-init.service`
 The persistent `/home` partition (p4) is an empty ext4 filesystem at flash time. This service detects the empty mount, creates `/home/rpi` with correct ownership, and copies `/etc/skel` so the `rpi` user can log in immediately. It disables itself after running once.
 
 ### `expand-rootfs.service`
 Grows the root partition to fill the available SD card space using `parted` + `resize2fs`. Required because the `.wic` image is built with a fixed partition size for the active rootfs slot. This service also disables itself after running once.
+
+### `acadia-data-init.service` + `var-lib-acadia.mount`
+Creates `/home/acadia` (with `acadia:acadia` ownership, mode `0750`) inside the persistent `/home` partition, then bind-mounts it at `/var/lib/acadia` so Acadia-Client (HAL telemetry, persistent state) survives an OTA rootfs reflash even though the user home directory is logically separate. Ordered `After=rpi5-home-init.service` (so the persistent mount exists) and `Before=acadia-client.service` (so the bind mount is in place before the client reads its state). Both disable themselves after running once.
 
 ---
 
