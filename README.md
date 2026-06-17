@@ -360,7 +360,7 @@ swupdate-client -v <device-ip> build/rpi5-<VERSION>.swu
 
 ### How it works
 
-1. **pre-install.sh** — detects the currently active slot (`/dev/mmcblk0p2` or `p3`) and creates a `/dev/swupdate-inactive` symlink pointing at the other slot.
+1. **pre-install.sh** — identifies the currently active slot by GPT label (`rootfs-a` / `rootfs-b`, see `wic/sdimage-rpi5.wks`) and creates a `/dev/swupdate-inactive` symlink pointing at the other slot. (Label-based lookup — survives SD, NVMe, and USB boot; see issue #54.)
 2. The SWUpdate `raw` handler streams `rootfs.ext4.gz` directly onto the inactive partition.
 3. **post-install.sh** — resolves the `PARTUUID` of the newly written partition, remounts `/boot` read-write, patches `root=PARTUUID=…` in `/boot/cmdline.txt`, then restores `/boot` to read-only.
 4. SWUpdate triggers a reboot; the RPi firmware boots the new slot.
