@@ -858,3 +858,81 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   real `SWU_KERNEL` / `SWU_DTB` values and inspect the
   output.
 
+## C11 — Issue #116 lint-swupdate-sync target + batched doc/code drift fixes (2026-06-17)
+
+**Do**
+- **For sync assertions between two files, use `diff -q`, not
+  `awk` range extraction.**  `awk '/^target:/,/^[a-zA-Z]/'
+  Makefile` ends the range on the very next line that starts
+  with a letter — including comment lines like `# -----...`,
+  which collapses the body to a single line.  Use
+  `sed -n '/^target:/,/^[^[:space:]]/p'` instead: it ends the
+  range on the next *non-whitespace* line, which is the start
+  of the *next* target — exactly what you want.
+- **For lint targets that should fail closed, gate on `set -e`
+  + early `exit 1`.**  The `lint-swupdate-sync` target uses
+  `set -e` at the top, then loops over `pre-install.sh` and
+  `post-install.sh`, exiting 1 on the first drift.  A non-zero
+  `make` exit propagates correctly to CI.  Don't use `||` to
+  swallow failures — the loop must halt at the first drift so
+  the operator only sees one error, not all of them.
+- **Document *both* the existence of a safety check and the
+  fact that it's not in the README.**  Issue #105 noted the
+  `flash` target's `test -b` block-device check is an extra
+  safety check the README didn't document.  The fix added a
+  parenthetical "(refuses non-block-device DEVICE values; see
+  issue #105)" so future contributors don't silently drop the
+  check while also don't wonder why the README mentions it.
+- **For README fixes, batch by file scope, not by issue scope.**
+  Issues #93, #94, #95, #96, #97, #98, #99, #100, #101, #102 all
+  touched README.md (or files the README references).  Doing
+  them as one PR (one branch, one review) is faster than ten
+  PRs and easier for the reviewer — the diff is "README sync"
+  rather than ten orthogonal concerns.
+- **Anchor regex tests on the *list* syntax, not just the
+  package name.**  For #101, `grep -qF 'protobuf-compiler'`
+  matches the package list AND the explanatory comment that
+  mentions the package.  The fix is to anchor on the list
+  syntax: `grep -E '^- .protobuf.,'` finds the package-list
+  line, then check that line for `protobuf-compiler,`.  This
+  pattern (anchor on `- \`name\`,`) generalises to any
+  comma-separated Markdown list.
+
+**Don't**
+- **Don't close a "Met" issue without a regression test.**  Issues
+  #103, #104, #105, #106 are all "Met" (the README's claims are
+  correct), but the *test* for "Met" is the issue itself — not a
+  CI assertion.  Adding `test_readme_makefile_sync.bats` pins the
+  README wording AND the Makefile behaviour, so a future refactor
+  that breaks the sync fails CI immediately.  Without the test,
+  "Met" is a one-time verification that drifts the moment anyone
+  edits either file.
+- **Don't add a `make lint` target that the project's CI doesn't
+  run.**  The `lint` target introduced for #116 is an *alias* for
+  `lint-swupdate-sync`.  Future lint checks should add their own
+  target (`lint-foo`) and add `lint: lint-foo lint-bar` to the
+  alias, so the chain is explicit and easy to extend.  A `lint`
+  target that does nothing is worse than no target — contributors
+  will assume it does something.
+- **Don't use `[[:space:]]` in bash regex character classes
+  with `/` delimiters.**  `grep -E 'cm1[[:space:]]*/[[:space:]]*cm3'`
+  matches when bash's regex engine interprets `/` as a literal
+  — but `[[:space:]]` followed by `/` is interpreted as a
+  regex token *and* a literal in some grep implementations,
+  silently failing the match.  Use `.*` for the inter-token
+  match: `grep -qE 'cm1.*cm3.*cm4.*cm5'`.  Simpler, portable,
+  and equally precise for this use case.
+- **Don't try to assert against comment lines that reference
+  the issue number.**  The fix-up comments (`issue #101:
+  'protobuf-compiler' deliberately excluded — runtime only`)
+  are *intentional* historical context.  `grep -vF` on those
+  lines would falsely report "still present" — the test should
+  exclude lines matching `issue #[0-9]+:` from the stale-reference
+  sweep.
+- **Don't merge multiple issue fixes into a single commit when
+  one of them is a breaking change.**  Issues #93–#102 are all
+  documentation + a one-line `useradd -M` change (issue #102
+  improvement).  None are interface contracts or breaking.  If
+  any of them had been a breaking change (§5), it would have
+  needed its own PR with explicit user approval first.
+
