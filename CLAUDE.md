@@ -794,3 +794,67 @@ No Yocto host dependencies (Python, BitBake, etc.) required — everything runs 
   outside any function).**  bats runs gather at parse time,
   before any test's `setup()` has run, so `${BIN}` and `${TMP}`
   are unset.  All stub installation belongs in `setup()`.
+
+## C10 — Issue #113 sw-description per-board templating: lessons learned (2026-06-17)
+
+**Do**
+- **Tokenize *every* per-board field in the sw-description, not
+  just the version.**  The previous sed pipeline substituted
+  `@@VERSION@@` but left the `kernel_2712.img` /
+  `bcm2712-rpi-5-b.dtb` filenames hardcoded — so the .swu
+  referenced filenames that didn't exist in the cpio for any
+  non-rpi5 board, and SWUpdate would reject the install with
+  "rawfile file not found".  Three tokens (version, kernel,
+  DTB), three sed `-e` expressions.  Order doesn't matter; the
+  `g` flag does.
+- **Anchor the recipe in three places.**  Source: `sw-description`
+  must contain the `@@KERNEL@@` / `@@DTB@@` tokens
+  (regression test #1).  Build: Makefile's sed pipeline must
+  substitute all three tokens with `g` (regression test #6/7/8).
+  Output: end-to-end `sed` run against a per-board value must
+  produce a sw-description with **zero** remaining `@@` tokens
+  (regression test #11).  The third anchor catches a silent
+  sed-regex typo that the source/build anchors miss.
+- **Compute the SUT path from `BATS_TEST_DIRNAME` as a
+  relative number of `..` segments, then verify with
+  `realpath`.**  Tests under
+  `meta/meta-acadia/recipes-swupdate/<recipe>/tests/` are
+  *five* levels deep: tests → recipe → recipes-swupdate →
+  meta-acadia → meta → Acadia-OS.  Use `../../../../../Makefile`
+  and `../../../../../meta/...`, not four segments up.  The
+  recipe-level tests use `../files/` (one segment up), which
+  is *not* portable to a tests/ subdir of a recipe.
+
+**Don't**
+- **Don't use `grep -qE` for shell tokens that contain
+  Makefile variable references.**  The patterns
+  `s|@@KERNEL@@|$(SWU_KERNEL)|g` contain literal `$` and `(`,
+  and `grep -E` treats `$` as line-anchor.  The first regex
+  pattern with `\$\(` matched 0 lines because grep was
+  looking for `$(SWU_KERNEL)` (literal parens) which never
+  appears — the file has `$(SWU_KERNEL)` after Make
+  expansion but grep reads the file *unexpanded*.  Use
+  `grep -qF` (fixed string) for patterns containing `$`,
+  `(`, `)`, `|`, etc.  Reserve `-E` for patterns that need
+  regex anchors or character classes.
+- **Don't assume the bats `setup()` function inherits
+  environment variables from the parent.**  `TEST_KERNEL=foo
+  bats ...` sets `TEST_KERNEL` in the bats harness, but
+  `setup()` is a child function — the variable is exported
+  via `export TEST_KERNEL=foo` first.  The cleanest pattern
+  is to read the default in `setup()` itself (`${TEST_KERNEL
+  :-kernel_2711.img}`), then per-test overrides use
+  `TEST_KERNEL=... bats ...` which bats *does* export
+  automatically.  Don't try to set env vars in the bats
+  test body — they don't propagate to `setup()`.
+- **Don't run `make -n swu BOARD=<x>` and read the recipe
+  text as proof the fix works.**  `make -n` shows the
+  *recipe* (unexpanded `$()` references) by default because
+  it must preserve the recipe for dry-run display.  The
+  Make variables are visible only via `make -n -p` (print
+  database) or by running the sed pipeline directly against
+  the values you want.  When verifying per-board templating,
+  always run the actual `sed -e ... -e ...` command with the
+  real `SWU_KERNEL` / `SWU_DTB` values and inspect the
+  output.
+
