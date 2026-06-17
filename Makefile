@@ -536,6 +536,38 @@ completion:
 # -----------------------------------------------------------------------------
 # Help
 # -----------------------------------------------------------------------------
+# Issue #116: assert the .swu-side copy of pre/post-install.sh in
+# meta/meta-acadia/swupdate/ matches the recipe-side copy under
+# meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/.
+# The two copies exist because the Makefile packages the .swu
+# directly from meta-acadia/swupdate/ while the recipe installs
+# them to /usr/lib/swupdate/ via SRC_URI.  Per CLAUDE.md C1, drift
+# between them silently regresses the rollback chain — only this
+# target catches it.
+lint-swupdate-sync:
+	@set -e; \
+	for script in pre-install.sh post-install.sh; do \
+	    a="meta/meta-acadia/swupdate/$$script"; \
+	    b="meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/$$script"; \
+	    if [ ! -f "$$a" ]; then \
+	        echo "ERROR: $$a missing"; exit 1; \
+	    fi; \
+	    if [ ! -f "$$b" ]; then \
+	        echo "ERROR: $$b missing"; exit 1; \
+	    fi; \
+	    if ! diff -q "$$a" "$$b" >/dev/null; then \
+	        echo "ERROR: $$script has drifted between .swu-side and recipe-side copies:"; \
+	        echo "  .swu-side:    $$a"; \
+	        echo "  recipe-side:  $$b"; \
+	        echo "Fix: edit one and 'cp' it over the other, or rework the recipe to pull"; \
+	        echo "     from meta/meta-acadia/swupdate/ directly (see issue #116)."; \
+	        exit 1; \
+	    fi; \
+	    echo "  OK: $$script in sync"; \
+	done
+
+lint: lint-swupdate-sync
+
 help:
 	@printf "\nUsage: make <target> <board>\n"
 	@printf "\n  Examples:\n"
@@ -570,6 +602,9 @@ help:
 	@printf "  %-24s %s\n" "clean-all"          "Remove build/, downloads/, sstate-cache/"
 	@printf "\nUtilities:\n"
 	@printf "  %-24s %s\n" "completion"         "Install bash tab-completion into ~/.bashrc"
+	@printf "\nLinting:\n"
+	@printf "  %-24s %s\n" "lint"               "Run all lint checks (currently: swupdate-script sync)"
+	@printf "  %-24s %s\n" "lint-swupdate-sync" "Assert .swu-side and recipe-side pre/post-install.sh match"
 	@printf "\nBoards:\n"
 	@printf "  rpi5  rpi4-64  rpi4  rpi3-64  rpi3  rpi2\n"
 	@printf "  rpi0-2w-64  rpi0-2w  rpi0-wifi  rpi0  rpi1\n"
