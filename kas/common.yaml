@@ -21,9 +21,10 @@ local_conf_header:
     # Raspberry Pi settings
     ENABLE_UART = "1"
     GPU_MEM     = "128"
-
-    # Accept proprietary firmware licence required by meta-raspberrypi
-    LICENSE_FLAGS_ACCEPTED:append = " synaptics-killswitch"
+    # NOTE: do not add `synaptics-killswitch` here.  meta-raspberrypi
+    # does not ship that recipe, and the flag is a no-op for the
+    # Raspberry Pi family.  If a future BSP port needs it, add a
+    # comment here explaining which BSP — see issue #93.
 
     # Shared caches (bind-mounted by Docker)
     DL_DIR     ?= "${TOPDIR}/../downloads"
