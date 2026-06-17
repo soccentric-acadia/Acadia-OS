@@ -197,7 +197,7 @@ The default board is `rpi5` when no board is specified.
 | `esdk` | Build extensible SDK installer → `deploy/esdk/` (no Docker image) |
 | `shell` | Interactive kas/BitBake shell inside the build container |
 | `swu` | Package a `.swu` OTA bundle from the latest `rootfs.ext4` |
-| `flash` | Flash the latest `.wic.bz2` to `DEVICE` using bmaptool |
+| `flash` | Flash the latest `.wic.bz2` to `DEVICE` using bmaptool (refuses non-block-device `DEVICE`; see issue #105) |
 
 ### Docker Image Targets
 
