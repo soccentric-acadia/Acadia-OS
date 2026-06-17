@@ -118,10 +118,10 @@ rpi/
 ├── rpi-make-completion.bash    # Bash tab-completion script
 │
 ├── kas/
-│   ├── base.yaml               # Shared: repos, layers, local_conf defaults
+│   ├── common.yaml             # Shared: repos, layers, local_conf defaults
 │   ├── rpi5.yaml               # RPi 5 — includes base + A/B OTA WKS override
 │   ├── cm5.yaml                # CM5 IO Board
-│   ├── rpi4-64.yaml            # ... one file per board (all include base.yaml)
+│   ├── rpi4-64.yaml            # ... one file per board (all include common.yaml)
 │   └── ...
 │
 ├── docker/
@@ -141,8 +141,11 @@ rpi/
 │   └── meta-acadia/            # Project-specific Yocto layer
 │       ├── conf/layer.conf
 │       ├── recipes-core/
-│       │   ├── images/core-image-full-cmdline.bbappend  # Image customisation
-│       │   └── rpi5-home-init/  # Persistent /home first-boot init
+│       │   ├── images/acadia-image.bb         # Production image (issue #94)
+│       │   ├── rpi5-home-init/        # Persistent /home first-boot init
+│       │   ├── acadia-services/       # Systemd services
+│       │   ├── acadia-data-init/      # Data partition init (issue #114)
+│       │   └── os-release/            # OS release info
 │       ├── recipes-connectivity/
 │       │   └── rpi5-connectivity/  # systemd-networkd, wpa_supplicant, Bluetooth
 │       ├── recipes-kernel/
@@ -244,7 +247,7 @@ Called automatically by the build targets above; can also be invoked manually.
 | `rpi1` | BCM2835, ARM1176 32-bit |
 | `rpi0` / `rpi0-wifi` | BCM2835, ARM1176 32-bit |
 | `rpi0-2w` / `rpi0-2w-64` | RPi Zero 2 W, Cortex-A53 32/64-bit |
-| `cm1` / `cm3` / `cm5` | Compute Modules |
+| `cm1` / `cm3` / `cm4` / `cm5` | Compute Modules (issue #98: cm4 added) |
 | `rpi-armv7` / `rpi-armv8` | Generic ARMv7/ARMv8 |
 
 ---
@@ -253,7 +256,7 @@ Called automatically by the build targets above; can also be invoked manually.
 
 The kas configuration is split into two levels:
 
-### `kas/base.yaml` — shared baseline
+### `kas/common.yaml` — shared baseline
 
 Defines all external layer repos (pinned to `scarthgap`) and the common `local.conf` settings applied to every board:
 
@@ -266,7 +269,7 @@ Defines all external layer repos (pinned to `scarthgap`) and the common `local.c
 
 ### `kas/<BOARD>.yaml` — per-board overrides
 
-Each file includes `base.yaml` via `header.includes` and sets the `machine:` field. Boards that need a non-default `WKS_FILE` (currently `rpi5` and `cm5`) add a `local_conf_header` override.
+Each file includes `common.yaml` via `header.includes` and sets the `machine:` field. Boards that need a non-default `WKS_FILE` (currently `rpi5` and `cm5`) add a `local_conf_header` override.
 
 **Adding a new board** is as simple as:
 
@@ -275,7 +278,7 @@ Each file includes `base.yaml` via `header.includes` and sets the `machine:` fie
 header:
   version: 14
   includes:
-    - base.yaml
+    - common.yaml
 
 machine: my-custom-machine
 ```
@@ -286,7 +289,7 @@ Then run `make build my-custom-board`.
 
 ## Image Contents
 
-The image is `core-image-full-cmdline` with the following additions from `meta-acadia`:
+The image is `acadia-image` (inherits `core-image-full-cmdline`) with the following additions from `meta-acadia`:
 
 ### Connectivity (`rpi5-connectivity`)
 - **Ethernet** — DHCP via systemd-networkd (`10-eth.network`)
@@ -300,14 +303,17 @@ The image is `core-image-full-cmdline` with the following additions from `meta-a
 - Boot-check service that confirms a successful boot and marks the slot healthy
 
 ### gRPC + Protobuf
-- `protobuf`, `protobuf-compiler`, `protobuf-lite`
+- `protobuf`, `protobuf-lite` (issue #101: `protobuf-compiler` deliberately excluded — runtime only)
 - `grpc`
 - `python3-grpcio`, `python3-protobuf`
 
 ### User account
-- Username: **`rpi`** / Password: **`rpi`**
+- Username: **`rpi`** (account is locked — `usermod -L` per `acadia-image.bb:62`; SSH-key access only)
 - Member of the `sudo` group
 - Home directory on the persistent `/home` partition (p4)
+- The recipe does **not** set a password. Drop your public key in
+  `/home/rpi/.ssh/authorized_keys` (or use the Yocto `extrausers`
+  mechanism in `acadia-image.bb`) to enable login.
 
 ### Kernel
 - Linux **6.6.x** pinned to `bba53a117a4a5c29da892962332ff1605990e17a`
@@ -344,6 +350,14 @@ make swu SWU_VERSION=1.2.3        # explicit version string
 ```
 
 The package is written to `build/rpi5-<VERSION>.swu`.
+
+The kernel and DTB filenames embedded in the `.swu` are derived
+per-board from `SWU_KERNEL` / `SWU_DTB` (issue #100). For `rpi5`,
+they are `kernel_2712.img` / `bcm2712-rpi-5-b.dtb`; for `rpi4-64`,
+`kernel_2711.img` / `bcm2711-rpi-4-b.dtb`; and so on through the
+BCM2712/2711/2710/2837/2836/2835 family. The Makefile's per-board
+table also accepts `make swu <board> SWU_KERNEL=<name> SWU_DTB=<name>`
+to override the value (e.g. for a custom-built kernel).
 
 ### Delivering the update
 
@@ -502,7 +516,7 @@ Creates `/home/acadia` (with `acadia:acadia` ownership, mode `0750`) inside the 
 
 ### Adding packages
 
-Edit `meta/meta-acadia/recipes-core/images/core-image-full-cmdline.bbappend`:
+Edit `meta/meta-acadia/recipes-core/images/acadia-image.bb` and add packages to the `IMAGE_INSTALL:append` line:
 
 ```bitbake
 IMAGE_INSTALL:append = " my-package another-package"
@@ -523,7 +537,10 @@ After flashing, mount the root partition and edit:
 ```
 /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
 ```
-Or build the credentials directly into the image by modifying `recipes-connectivity/rpi5-connectivity/files/wpa_supplicant-wlan0.conf`.
+Or build the credentials directly into the image by modifying
+`meta/meta-acadia/recipes-connectivity/rpi5-connectivity/files/wpa_supplicant-wlan0.conf`
+(issue #99: the full path is `meta/meta-acadia/...`, not the bare
+`recipes-connectivity/...` form).
 
 ### Pinning or updating the kernel
 
@@ -531,7 +548,7 @@ Edit `meta/meta-acadia/recipes-kernel/linux/linux-raspberrypi_6.6.bbappend` and 
 
 ### Changing the Poky/layer branch
 
-All external layers are pinned to the **scarthgap** (Yocto 5.0 LTS) branch in `kas/base.yaml`. Update `branch:` and `commit:` fields there and re-run `make build`.
+All external layers are pinned to the **scarthgap** (Yocto 5.0 LTS) branch in `kas/common.yaml`. Update `branch:` and `commit:` fields there and re-run `make build`.
 
 ---
 
@@ -581,7 +598,7 @@ cat build/tmp/work/<arch>/<recipe>/<version>/temp/log.do_<task>.*
 
 ### `CONF_VERSION` mismatch error
 
-If you see `NotImplementedError: Your version of local.conf was generated from an older/newer version`, ensure `CONF_VERSION = "2"` is present in `kas/base.yaml`. KAS regenerates `build/conf/local.conf` on every invocation, so manual edits to that file are overwritten.
+If you see `NotImplementedError: Your version of local.conf was generated from an older/newer version`, ensure `CONF_VERSION = "2"` is present in `kas/common.yaml`. KAS regenerates `build/conf/local.conf` on every invocation, so manual edits to that file are overwritten.
 
 ### `kas shell` command syntax
 

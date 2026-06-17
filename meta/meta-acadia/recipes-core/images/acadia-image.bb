@@ -56,8 +56,12 @@ IMAGE_INSTALL:append = " \
 IMAGE_INSTALL:append = " acadia-hal acadia-services"
 
 # Operator account — locked, SSH-key access only
+# Issue #102: use -M (--no-create-home) because p4 (/home) is
+# recreated by rpi5-home-init.sh on first boot.  useradd -m would
+# create /home/rpi on the volatile rootfs, which is then hidden
+# by the persistent mount at /home.
 inherit extrausers
 EXTRA_USERS_PARAMS = "\
-    useradd -m -s /bin/bash -G sudo rpi; \
+    useradd -M -s /bin/bash -G sudo rpi; \
     usermod -L rpi; \
 "
