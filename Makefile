@@ -75,12 +75,15 @@ MACHINE          := $(shell grep '^machine:' $(KAS_CONFIG) 2>/dev/null | awk '{p
 #   2711   rpi4 / rpi4-64    kernel_2711.img        bcm2711-rpi-4-b.dtb
 #   2711   cm4               kernel_2711.img        bcm2711-rpi-cm4-io.dtb
 #   2710   rpi3 / rpi3-64    kernel_2710.img        bcm2710-rpi-3-b.dtb
+#   2837   cm3               kernel.img             bcm2837-rpi-cm3.dtb
+#   2835   cm1               kernel.img             bcm2835-rpi-cm.dtb
 #   2708   rpi0 / rpi0-wifi  kernel.img             bcm2708-rpi-zero.dtb
 #
-# The .swu-build step below calls `find ... -name '$$SWU_KERNEL'`, so the
-# values here are patterns, not exact paths.  Override on the command line
-# for boards not in the table:
-#   make swu rpi4-64 SWU_KERNEL=kernel_2711.img SWU_DTB=bcm2711-rpi-4-b.dtb
+# Boards NOT in the table (issue #111: rpi-armv7, rpi-armv8) fail
+# closed with a clear error rather than silently building a broken
+# .swu.  Override on the command line for these boards once you
+# have verified the kernel/DTB filename in the deploy dir:
+#   make swu rpi-armv7 SWU_KERNEL=... SWU_DTB=...
 ifeq ($(BOARD),rpi5)
   SWU_KERNEL ?= kernel_2712.img
   SWU_DTB    ?= bcm2712-rpi-5-b.dtb
@@ -96,6 +99,12 @@ else ifneq ($(filter rpi4%,$(BOARD)),)
 else ifneq ($(filter rpi3%,$(BOARD)),)
   SWU_KERNEL ?= kernel_2710.img
   SWU_DTB    ?= bcm2710-rpi-3-b.dtb
+else ifeq ($(BOARD),cm3)
+  SWU_KERNEL ?= kernel.img
+  SWU_DTB    ?= bcm2837-rpi-cm3.dtb
+else ifeq ($(BOARD),cm1)
+  SWU_KERNEL ?= kernel.img
+  SWU_DTB    ?= bcm2835-rpi-cm.dtb
 else ifneq ($(filter rpi0%,$(BOARD)),)
   SWU_KERNEL ?= kernel.img
   SWU_DTB    ?= bcm2708-rpi-zero.dtb
@@ -329,6 +338,23 @@ esdk: ensure-image kas-container-script
 ## Build a .swu OTA update package from the latest rootfs.ext4 image
 ## Usage: make swu   or   make swu SWU_VERSION=1.2.3
 swu: build
+	# Issue #111: fail closed if the SWU_KERNEL/SWU_DTB table at the
+	# top of this file does not have an entry for $(BOARD).  Building
+	# a .swu without the kernel/DTB inclusion produces a package that
+	# SWUpdate cannot install (rawfile 'file not found' — see sw-description
+	# templating fix in issue #112).  The operator can override on the
+	# command line once they have confirmed the kernel/DTB filename in
+	# the deploy dir.
+	@test -n "$(SWU_KERNEL)" || { \
+	    echo "ERROR: SWU_KERNEL is undefined for BOARD=$(BOARD)."; \
+	    echo "  Either: (a) add an entry to the per-board table near the top of this Makefile,"; \
+	    echo "  Or:     (b) override on the command line:"; \
+	    echo "             make swu $(BOARD) SWU_KERNEL=kernel*.img SWU_DTB=bcm*.dtb"; \
+	    exit 1; }
+	@test -n "$(SWU_DTB)" || { \
+	    echo "ERROR: SWU_DTB is undefined for BOARD=$(BOARD)."; \
+	    echo "  See SWU_KERNEL message above for resolution."; \
+	    exit 1; }
 	$(eval ROOTFS := $(shell find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \
 	    -name "acadia-image-$(MACHINE)*.rootfs.ext4" \
 	    -o -name "core-image-full-cmdline-$(MACHINE)*.rootfs.ext4" 2>/dev/null \
