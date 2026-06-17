@@ -390,7 +390,13 @@ swu: build
 	@[ -n "$(DTB)" ]    && cp "$(DTB)"    "$(BUILD_DIR)/swu/$(SWU_DTB)" || true
 
 	# --- sw-description ---
-	@sed "s|@@VERSION@@|$(SWU_VERSION)|" \
+	# Issue #113: sw-description is templated on the per-board
+	# kernel/DTB filenames (in addition to the version).  Without
+	# @@KERNEL@@/@@DTB@@ substitution the .swu would reference
+	# filenames that don't exist in the cpio for any non-rpi5 board.
+	@sed -e "s|@@VERSION@@|$(SWU_VERSION)|" \
+	     -e "s|@@KERNEL@@|$(SWU_KERNEL)|g" \
+	     -e "s|@@DTB@@|$(SWU_DTB)|g" \
 	    meta/meta-acadia/swupdate/sw-description \
 	    > "$(BUILD_DIR)/swu/sw-description"
 	@cp meta/meta-acadia/swupdate/pre-install.sh  "$(BUILD_DIR)/swu/"

@@ -31,14 +31,14 @@ images: (
         compressed = "zlib";
     },
     {
-        filename = "kernel_2712.img";
+        filename = "@@KERNEL@@";
         type     = "rawfile";
-        path     = "/boot/kernel_2712.img";
+        path     = "/boot/@@KERNEL@@";
     },
     {
-        filename = "bcm2712-rpi-5-b.dtb";
+        filename = "@@DTB@@";
         type     = "rawfile";
-        path     = "/boot/bcm2712-rpi-5-b.dtb";
+        path     = "/boot/@@DTB@@";
     }
 );
 
