@@ -455,6 +455,12 @@ source /opt/poky/esdk/environment-setup-*
 devtool add my-recipe ~/src/my-project
 ```
 
+Override the eSDK install path (symmetric to `SDK_INSTALL_DIR` for the standard SDK):
+```bash
+# These internal variables are rarely needed
+make esdk-image rpi5 ESDK_INSTALL_DIR=/opt/my-esdk
+```
+
 ### Conditional rebuild
 
 ```bash
