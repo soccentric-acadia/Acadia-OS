@@ -3,9 +3,17 @@
 # =============================================================================
 
 # --- Image names -------------------------------------------------------------
-KAS_IMAGE        ?= rpi5-kas:latest
-SDK_IMAGE        ?= rpi5-sdk:latest
-ESDK_IMAGE       ?= rpi5-esdk:latest
+# Per-board Docker image tags so multiple boards can co-exist (issue #112).
+# Default is rpi5 (matching the BOARD default below).  Override the image
+# name with a Make variable for non-rpi5 boards, e.g.:
+#   make sdk-image rpi4-64 SDK_IMAGE=rpi4-64-sdk:latest
+# but the conventional pattern is to let the board drive the name:
+#   KAS_IMAGE  = $(BOARD)-kas:latest
+#   SDK_IMAGE  = $(BOARD)-sdk:latest
+#   ESDK_IMAGE = $(BOARD)-esdk:latest
+KAS_IMAGE        ?= $(BOARD)-kas:latest
+SDK_IMAGE        ?= $(BOARD)-sdk:latest
+ESDK_IMAGE       ?= $(BOARD)-esdk:latest
 
 # Pin to a specific kas release — https://github.com/siemens/kas/releases
 KAS_VERSION      ?= 4.5
