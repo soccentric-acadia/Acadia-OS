@@ -14,10 +14,12 @@ SRC_URI = " \
 "
 
 # wpa-supplicant and bluez5 must be present for the preset to enable them.
-# systemd-resolved provides the /run/systemd/resolve/stub-resolv.conf target
-# of the /etc/resolv.conf symlink below — without it, resolv.conf is a
-# dangling symlink at boot (issue #43).
-RDEPENDS:${PN} = "wpa-supplicant bluez5 systemd-resolved"
+# resolved provides the /run/systemd/resolve/stub-resolv.conf target of the
+# /etc/resolv.conf symlink below.  In poky there is no separate
+# "systemd-resolved" package — the resolved service ships inside the main
+# `systemd` package (enabled via the default PACKAGECONFIG[resolved]).
+# RDEPEND on `systemd` so resolv.conf is never a dangling symlink (issue #43).
+RDEPENDS:${PN} = "wpa-supplicant bluez5 systemd"
 
 do_install() {
     # ── systemd-networkd network/netdev files ─────────────────────────────────

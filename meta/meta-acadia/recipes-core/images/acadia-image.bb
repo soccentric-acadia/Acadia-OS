@@ -4,16 +4,19 @@ DESCRIPTION = "Full image with A/B OTA, gRPC/Protobuf, Acadia-HAL, \
 HOMEPAGE = "https://github.com/SiliconCentric/Acadia-OS"
 LICENSE = "MIT"
 
-# Inherit core-image-full-cmdline (provides bash, sshd-dropbear,
-# debug-tweaks, base IMAGE_INSTALL framework).  The previous version
-# inherited bare core-image, which gave a smaller image but one that
-# did not match the operator-visible feature set documented in
-# CLAUDE.md / README.md.  Issues #25 and #45: the two image recipes
+# Base on core-image-full-cmdline (provides bash, sshd-openssh,
+# package-management, base IMAGE_INSTALL framework).  The previous
+# version inherited bare core-image, which gave a smaller image but
+# one that did not match the operator-visible feature set documented
+# in CLAUDE.md / README.md.  Issues #25 and #45: the two image recipes
 # (acadia-image.bb and core-image-full-cmdline.bbappend) had
 # divergent bases.  This is the canonical fix — both recipes now
 # share the same Yocto base; the bbappend-style deltas go into
 # this single recipe.
-inherit core-image-full-cmdline
+#
+# NOTE: core-image-full-cmdline is an *image recipe*, not a bbclass,
+# so it must be pulled in with `require` (not `inherit`).
+require recipes-extended/images/core-image-full-cmdline.bb
 IMAGE_FEATURES += "ssh-server-openssh"
 
 # OTA / swupdate
