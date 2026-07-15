@@ -15,3 +15,14 @@ BB_GIT_SHALLOW:pn-linux-raspberrypi = "0"
 
 # The pinned commit is 6.6.78 but the recipe PV is 6.6.63 — skip the mismatch check
 KERNEL_VERSION_SANITY_SKIP = "1"
+
+# Configurable kernel fragments for deployment-specific features
+# (feature.txt §3). This recipe already uses kernel-yocto conventions
+# (KBRANCH / SRCREV_machine above), so any *.cfg Kconfig fragment added
+# via SRC_URI is merged into the generated .config automatically —
+# no extra do_configure hook needed. Drop fragments into files/fragments/
+# and list them below; acadia-base.cfg ships empty (documentation only)
+# so it is a safe no-op until a deployment actually needs it.
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+SRC_URI:append = " file://fragments/acadia-base.cfg"
+

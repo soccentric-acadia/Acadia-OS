@@ -25,6 +25,16 @@ IMAGE_INSTALL:append = " swupdate swupdate-www rpi5-swupdate-config"
 # Home partition init
 IMAGE_INSTALL:append = " rpi5-home-init"
 
+# Root filesystem expansion (feature.txt §3: "Optional root filesystem
+# expansion service for single-partition deployments"). rpi5/cm5 use the
+# fixed-size A/B WKS layout (sdimage-rpi5.wks) where the two rootfs slots
+# are deliberately NOT grown to fill the disk, so expand-rootfs is
+# excluded there; every other (single-partition) board needs it to use
+# the full SD card / eMMC / NVMe capacity on first boot.
+IMAGE_INSTALL:append = " expand-rootfs"
+IMAGE_INSTALL:remove:raspberrypi5 = "expand-rootfs"
+IMAGE_INSTALL:remove:raspberrypi-cm5-io-board = "expand-rootfs"
+
 # Connectivity
 # rpi5-connectivity already pulls wpa-supplicant + bluez5 via RDEPENDS
 # (issue #53); list only the tools the user might use directly.
@@ -33,10 +43,16 @@ IMAGE_INSTALL:append = " \
 "
 
 # gRPC + Protobuf (NO compiler on device — M5)
-IMAGE_INSTALL:append = " \
-    protobuf protobuf-lite grpc \
-    python3-grpcio python3-protobuf sudo \
-"
+# Provided via packagegroup-acadia-middleware (feature.txt §6: "Middleware
+# package group support") instead of an individual package list.
+IMAGE_INSTALL:append = " packagegroup-acadia-middleware sudo"
+
+# Cloud/telemetry (feature.txt §6: "Cloud and telemetry package group
+# support"). packagegroup-acadia-cloud (mosquitto, chrony, curl) exists
+# but is NOT installed by default here — acadia-client (the cloud-facing
+# daemon) is likewise excluded pending an upstream repo. Deployments that
+# need cloud/telemetry connectivity should add
+# 'packagegroup-acadia-cloud' to IMAGE_INSTALL in their own image recipe.
 
 # Hardware interface tools
 IMAGE_INSTALL:append = " \
@@ -54,6 +70,21 @@ IMAGE_INSTALL:append = " \
 # NOTE: acadia-client is excluded until the upstream repo exists and SRCREV is
 # pinned. Add it back once available: acadia-client acadia-data-init
 IMAGE_INSTALL:append = " acadia-hal acadia-services"
+
+# Target debugging and profiling (feature.txt §6: "Target debugging and
+# profiling support"). tools-debug pulls in gdb/gdbserver/strace; valgrind
+# does not support ARMv6 (RPi 1 / Zero / CM1), so it is excluded there.
+IMAGE_FEATURES += "tools-debug"
+IMAGE_INSTALL:append = " gdbserver perf trace-cmd valgrind"
+IMAGE_INSTALL:remove:raspberrypi0 = "valgrind"
+IMAGE_INSTALL:remove:raspberrypi0-wifi = "valgrind"
+IMAGE_INSTALL:remove:raspberrypi = "valgrind"
+IMAGE_INSTALL:remove:raspberrypi-cm = "valgrind"
+
+# Ptest package and runner support (feature.txt §6 / §12). DISTRO_FEATURES
+# already has "ptest" appended (kas/common.yaml); this installs the
+# -ptest packages that are built as a result.
+IMAGE_FEATURES += "ptest-pkgs"
 
 # Operator account — locked, SSH-key access only
 # Issue #102: use -M (--no-create-home) because p4 (/home) is

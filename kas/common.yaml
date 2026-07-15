@@ -49,3 +49,30 @@ local_conf_header:
 
     # Swupdate specific variables
     SWUPDATE_INIT = "systemd"
+
+    # Configurable license flags for platform components that require
+    # explicit acceptance (feature.txt §11). Empty by default; extend via
+    # a board's local_conf_header (or LICENSE_FLAGS_ACCEPTED on the make
+    # command line) if a recipe's LICENSE_FLAGS trips a build failure —
+    # e.g. proprietary firmware or a commercially-licensed codec.
+    LICENSE_FLAGS_ACCEPTED ?= ""
+
+    # Ptest package and runner support (feature.txt §6 / §12). Requires
+    # "ptest" in DISTRO_FEATURES so recipes build their -ptest packages;
+    # IMAGE_FEATURES += "ptest-pkgs" (acadia-image.bb) installs them.
+    DISTRO_FEATURES:append = " ptest"
+
+    # SDK: include dev-pkgs (headers), dbg-pkgs (debug symbols), and
+    # target-side debugging/profiling tools in the toolchain payload
+    # (feature.txt §8: "Development headers, source, and debug symbols
+    # available in SDK output" / "gdbserver, perf, trace-cmd, valgrind,
+    # and ptest support in SDK workflows").
+    SDKIMAGE_FEATURES:append = " dev-pkgs dbg-pkgs tools-debug tools-profile"
+    TOOLCHAIN_TARGET_TASK:append = " gdbserver perf trace-cmd"
+
+    # Configurable product/platform kernel boot arguments (feature.txt §3).
+    # Empty by default; override ACADIA_EXTRA_CMDLINE per-board
+    # (local_conf_header) to append product-specific console/root/delay
+    # arguments to /boot/cmdline.txt without touching the base CMDLINE.
+    ACADIA_EXTRA_CMDLINE ?= ""
+    CMDLINE:append = " ${ACADIA_EXTRA_CMDLINE}"

@@ -236,6 +236,18 @@ Called automatically by the build targets above; can also be invoked manually.
 | `completion` | Install bash tab-completion into `~/.bashrc` |
 | `help` | Print usage and board list |
 
+### Linting and Validation
+
+| Target | Description |
+|--------|-------------|
+| `lint` | Run all lint checks (`lint-swupdate-sync`, `lint-makefile`, `lint-yaml`) |
+| `lint-makefile` | Validate Makefile syntax (`make -pn`, no recipes executed) |
+| `lint-yaml` | Validate YAML syntax of `kas/common.yaml`, `kas/boards/*.yaml`, `kas/repos/*.yaml` (runs inside the KAS container, which already ships PyYAML) |
+| `lint-swupdate-sync` | Assert the `.swu`-side and recipe-side copies of `pre-install.sh` / `post-install.sh` match |
+| `test` | Check host prerequisites (`docker`, `curl`) |
+| `check-board` | Validate every `kas/boards/*.yaml` has a non-empty `machine:` field |
+| `validate` | Parse BitBake metadata for the selected `BOARD` (`bitbake -p`) and check that middleware/cloud/debug/ptest features are wired into `acadia-image.bb` |
+
 ### Boards
 
 | Board | Description |

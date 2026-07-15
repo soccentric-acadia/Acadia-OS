@@ -172,7 +172,9 @@ _ESDK_IMAGE_TAG  := $(lastword  $(subst :, ,$(ESDK_IMAGE)))
         kas-container-script shell flash sdk esdk swu \
         deploy-images deploy-sdk deploy-esdk deploy-swu \
         clean clean-build clean-docker clean-all \
-        completion help
+        completion help \
+        lint lint-makefile lint-yaml lint-swupdate-sync \
+        test validate check-board
 
 all: build
 
@@ -566,7 +568,77 @@ lint-swupdate-sync:
 	    echo "  OK: $$script in sync"; \
 	done
 
-lint: lint-swupdate-sync
+lint: lint-swupdate-sync lint-makefile lint-yaml
+
+## Validate Makefile syntax — parses the full Makefile (all includes,
+## conditionals, and variable expansions) without executing any recipe.
+## feature.txt §12: "Makefile syntax validation through make lint".
+lint-makefile:
+	@$(MAKE) -pn >/dev/null 2>&1 \
+	    && echo "  OK: Makefile syntax valid" \
+	    || { echo "ERROR: Makefile failed to parse"; exit 1; }
+
+## Validate YAML syntax for common, board, and repo kas configuration
+## files (feature.txt §12: "YAML validation for common, target, and
+## repository configuration files"). Runs inside the KAS container so
+## PyYAML does not need to be installed on the host.
+lint-yaml: ensure-image
+	@echo "Validating YAML syntax (kas/common.yaml, kas/boards/*.yaml, kas/repos/*.yaml) ..."
+	@docker run --rm -v $(CURDIR):/w -w /w $(KAS_IMAGE) \
+	    python3 scripts/validate-yaml.py kas/common.yaml kas/boards/*.yaml kas/repos/*.yaml
+
+## Check host prerequisites — Docker and curl (feature.txt §12:
+## "Prerequisite checks for Docker and curl through make test").
+test:
+	@echo "Checking prerequisites ..."
+	@command -v docker >/dev/null 2>&1 \
+	    && echo "  OK: docker found ($$(docker --version))" \
+	    || { echo "  FAIL: docker not found in PATH"; exit 1; }
+	@command -v curl >/dev/null 2>&1 \
+	    && echo "  OK: curl found ($$(curl --version | head -1))" \
+	    || { echo "  FAIL: curl not found in PATH"; exit 1; }
+	@echo "All prerequisites satisfied."
+
+## Validate every board's kas configuration: the file exists and has a
+## non-empty 'machine:' field (feature.txt §12: "Automatic validation of
+## every target configuration and its MACHINE field" / "Target
+## configuration validation through make check-board").
+check-board:
+	@echo "Validating board configurations ..."
+	@fail=0; \
+	for f in kas/boards/*.yaml; do \
+	    board=$$(basename "$$f" .yaml); \
+	    m=$$(grep '^machine:' "$$f" 2>/dev/null | awk '{print $$2}'); \
+	    if [ -z "$$m" ]; then \
+	        echo "  FAIL: $$f has no 'machine:' field"; \
+	        fail=1; \
+	    else \
+	        echo "  OK: $$board -> MACHINE=$$m"; \
+	    fi; \
+	done; \
+	test "$$fail" -eq 0 || { echo "ERROR: one or more board configs failed validation"; exit 1; }
+
+## Validate BitBake metadata (parse-only, no build) for the selected
+## BOARD, plus a static check that the middleware/cloud/debug/SDK/ptest
+## features (§6, §8) are wired into the image recipe.
+## feature.txt §12: "BitBake metadata validation through make validate" /
+## "Validation of middleware, cloud, debug, SDK, development-package,
+## and ptest features".
+validate: check-board ensure-image kas-container-script
+	@echo "Parsing BitBake metadata for BOARD=$(BOARD) (MACHINE=$(MACHINE)) ..."
+	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -p"
+	@echo ""
+	@echo "Checking feature wiring in $(IMAGE_TARGET) recipe ..."
+	@img="meta/meta-acadia/recipes-core/images/acadia-image.bb"; \
+	 fail=0; \
+	 for token in packagegroup-acadia-middleware packagegroup-acadia-cloud tools-debug ptest-pkgs; do \
+	     grep -qF "$$token" "$$img" || { echo "  FAIL: $$token not referenced in $$img"; fail=1; }; \
+	 done; \
+	 if [ "$$fail" -eq 0 ]; then \
+	     echo "  OK: middleware/cloud/debug/ptest features present"; \
+	 else \
+	     echo "ERROR: feature validation failed"; exit 1; \
+	 fi
 
 help:
 	@printf "\nUsage: make <target> <board>\n"
@@ -603,8 +675,14 @@ help:
 	@printf "\nUtilities:\n"
 	@printf "  %-24s %s\n" "completion"         "Install bash tab-completion into ~/.bashrc"
 	@printf "\nLinting:\n"
-	@printf "  %-24s %s\n" "lint"               "Run all lint checks (currently: swupdate-script sync)"
+	@printf "  %-24s %s\n" "lint"               "Run all lint checks (Makefile syntax, YAML, swupdate sync)"
+	@printf "  %-24s %s\n" "lint-makefile"      "Validate Makefile syntax"
+	@printf "  %-24s %s\n" "lint-yaml"          "Validate kas YAML configuration syntax"
 	@printf "  %-24s %s\n" "lint-swupdate-sync" "Assert .swu-side and recipe-side pre/post-install.sh match"
+	@printf "\nValidation:\n"
+	@printf "  %-24s %s\n" "test"               "Check host prerequisites (docker, curl)"
+	@printf "  %-24s %s\n" "check-board"        "Validate every board's kas config has a MACHINE field"
+	@printf "  %-24s %s\n" "validate"           "Parse BitBake metadata + check middleware/cloud/debug/ptest wiring"
 	@printf "\nBoards:\n"
 	@printf "  rpi5  rpi4-64  rpi4  rpi3-64  rpi3  rpi2\n"
 	@printf "  rpi0-2w-64  rpi0-2w  rpi0-wifi  rpi0  rpi1\n"
