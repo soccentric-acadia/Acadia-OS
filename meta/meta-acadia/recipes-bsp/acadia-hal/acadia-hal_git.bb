@@ -5,16 +5,16 @@ LICENSE = "CLOSED"
 # Upstream is a private repo; no LICENSE file is shipped.  BitBake
 # requires a LIC_FILES_CHKSUM entry (issue #34).  We point at the
 # recipe file itself, which is always present, and use a literal
-# md5.  The md5 is a placeholder — BitBake will re-validate on
-# build, and the next contributor should replace it with the real
-# LICENSE file's checksum once upstream publishes one.
-LIC_FILES_CHKSUM = "file://${COREBASE}/../meta/meta-acadia/recipes-bsp/acadia-hal/acadia-hal_git.bb;md5=00000000000000000000000000000000"
+# md5.  The reviewed security.md policy is used as the stable local
+# checksum source until upstream publishes a real LICENSE file.
+LIC_FILES_CHKSUM = "file://security.md;md5=1606e3c70e7eb33ddfd7fa686c3b5ff0"
 
 SRC_URI = " \
     git://github.com/SiliconCentric/Acaida-HAL.git;protocol=ssh;user=git;branch=master \
     file://security.md \
 "
-SRCREV = "${AUTOREV}"
+# Pin the private upstream to avoid AUTOREV parse-time network lookups.
+SRCREV = "a385917dd57d65333506a522f250f91fc72dc0f8"
 
 PV = "1.0+git${SRCPV}"
 S = "${WORKDIR}/git"

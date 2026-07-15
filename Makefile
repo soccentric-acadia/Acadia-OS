@@ -173,7 +173,7 @@ _ESDK_IMAGE_TAG  := $(lastword  $(subst :, ,$(ESDK_IMAGE)))
         deploy-images deploy-sdk deploy-esdk deploy-swu \
         clean clean-build clean-docker clean-all \
         completion help \
-        lint lint-makefile lint-yaml lint-swupdate-sync \
+		lint lint-makefile lint-yaml lint-swupdate-sync lint-reproducibility \
         test validate check-board
 
 all: build
@@ -568,7 +568,21 @@ lint-swupdate-sync:
 	    echo "  OK: $$script in sync"; \
 	done
 
-lint: lint-swupdate-sync lint-makefile lint-yaml
+lint: lint-swupdate-sync lint-makefile lint-yaml lint-reproducibility
+
+## Reject AUTOREV in project recipes. Every active git recipe must use a
+## reviewed 40-character SHA so builds are reproducible and metadata parsing
+## does not perform a network lookup. The intentionally disabled
+## acadia-client recipe uses a fixed zero SHA and is not matched here.
+lint-reproducibility:
+	@matches="$$(grep -R -nE '^[[:space:]]*SRCREV[^#]*=[^#]*\$\{AUTOREV\}' \
+	    meta/meta-acadia/recipes-* --include='*.bb' --include='*.bbappend' 2>/dev/null || true)"; \
+	if [ -n "$$matches" ]; then \
+	    echo "ERROR: AUTOREV is not allowed in project recipes:"; \
+	    echo "$$matches"; \
+	    exit 1; \
+	fi; \
+	echo "  OK: no AUTOREV SRCREV values found"
 
 ## Validate Makefile syntax — parses the full Makefile (all includes,
 ## conditionals, and variable expansions) without executing any recipe.
@@ -679,6 +693,7 @@ help:
 	@printf "  %-24s %s\n" "lint-makefile"      "Validate Makefile syntax"
 	@printf "  %-24s %s\n" "lint-yaml"          "Validate kas YAML configuration syntax"
 	@printf "  %-24s %s\n" "lint-swupdate-sync" "Assert .swu-side and recipe-side pre/post-install.sh match"
+	@printf "  %-24s %s\n" "lint-reproducibility" "Reject AUTOREV source revisions"
 	@printf "\nValidation:\n"
 	@printf "  %-24s %s\n" "test"               "Check host prerequisites (docker, curl)"
 	@printf "  %-24s %s\n" "check-board"        "Validate every board's kas config has a MACHINE field"

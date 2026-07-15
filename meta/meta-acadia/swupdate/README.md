@@ -334,22 +334,26 @@ reboot
 
 ## Rollback
 
-The current implementation does **not** perform automatic rollback (no boot
-counter / watchdog integration). Manual rollback procedure:
+Automatic rollback is enabled for the RPi 5 / CM5 A/B layout. The update
+flow uses the U-Boot environment and the boot-count services installed by
+`rpi5-swupdate-config`:
+
+1. `post-install.sh` switches `/boot/cmdline.txt` to the inactive slot and
+   writes `/boot/boot_state` with three permitted boot attempts.
+2. U-Boot initialises `bootlimit=3`, increments `bootcount` while an upgrade
+   is pending, and runs `altbootcmd` when the limit is reached. That command
+   clears the pending flag and boots using the previous slot configuration.
+3. `swupdate-bootcheck.service` runs before `network.target`, verifies the
+   selected kernel, DTB, root PARTUUID, and boot health, and records the result.
+4. `bootcount-reset.service` clears the U-Boot upgrade flag only after the
+   health check succeeds. A failed or incomplete boot therefore remains
+   eligible for automatic rollback on the next attempt.
+
+The manual procedure remains available for emergency recovery:
 
 1. Boot into the previous slot by editing `/boot/cmdline.txt` (see above).
 2. From the previous slot, run `make swu` to generate a new package and push it
    via web UI or CLI.
-
-To add automatic rollback, a typical approach is:
-
-1. Store a `boot_tries` counter in a dedicated small FAT partition or in a U-Boot
-   environment (requires U-Boot, not the default RPi firmware bootloader).
-2. In the initramfs (or early `ExecStartPre` in a high-priority systemd unit),
-   decrement the counter; if it reaches zero, run `post-install.sh` pointing back
-   at the previous slot's PARTUUID.
-3. `swupdate-bootcheck.service` plays the role of "boot confirmed" — set the
-   counter back to its initial value here.
 
 ---
 
