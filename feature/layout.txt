@@ -53,8 +53,11 @@ name and update its kas repository path and layer name.
     +-- build/
     |   Generated Yocto build state; normally ignored by git.
     |
-    +-- cache/
-    |   Shared downloads and sstate cache; normally ignored by git.
+    +-- downloads/
+    |   Shared source downloads; normally ignored by git.
+    |
+    +-- sstate-cache/
+    |   Shared Yocto sstate cache; normally ignored by git.
     |
     +-- deploy/
     |   Release artifacts copied from the Yocto output directories.

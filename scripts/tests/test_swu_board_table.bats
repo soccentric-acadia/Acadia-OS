@@ -96,6 +96,18 @@ setup() {
     grep -qE 'SWU_DTB=bcm' "${SUT}"
 }
 
+@test "swu target: rejects boards without the A/B WIC layout" {
+    grep -qF 'rpi5|cm5) ;;' "${SUT}"
+    grep -qF 'SWUpdate A/B bundles are supported only for BOARD=rpi5 or BOARD=cm5' "${SUT}"
+}
+
+@test "swu target: rejects missing kernel and DTB artifacts" {
+    grep -qF 'ERROR: $(SWU_KERNEL) not found in the deploy directory' "${SUT}"
+    grep -qF 'ERROR: $(SWU_DTB) not found in the deploy directory' "${SUT}"
+    grep -qF '@cp "$(KERNEL)" "$(BUILD_DIR)/swu/$(SWU_KERNEL)"' "${SUT}"
+    grep -qF '@cp "$(DTB)"    "$(BUILD_DIR)/swu/$(SWU_DTB)"' "${SUT}"
+}
+
 # --- Make self-consistency (no parse error) ------------------------------
 
 @test "Makefile: parses without error (make -n help)" {

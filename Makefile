@@ -348,6 +348,14 @@ esdk: ensure-image kas-container-script
 ## Build a .swu OTA update package from the latest rootfs.ext4 image
 ## Usage: make swu   or   make swu SWU_VERSION=1.2.3
 swu: build
+	# The bundled SWUpdate flow writes an inactive rootfs slot and is only
+	# defined for boards that select sdimage-rpi5.wks.
+	@case "$(BOARD)" in \
+	    rpi5|cm5) ;; \
+	    *) echo "ERROR: SWUpdate A/B bundles are supported only for BOARD=rpi5 or BOARD=cm5 (BOARD=$(BOARD))."; \
+	       echo "  This board does not select the A/B WIC layout required by the bundled OTA scripts."; \
+	       exit 1 ;; \
+	esac
 	# Issue #111: fail closed if the SWU_KERNEL/SWU_DTB table at the
 	# top of this file does not have an entry for $(BOARD).  Building
 	# a .swu without the kernel/DTB inclusion produces a package that
@@ -385,11 +393,11 @@ swu: build
 	$(eval DTB := $(shell find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \
 	    -name "$(SWU_DTB)" 2>/dev/null | sort -V | tail -1))
 	@test -n "$(KERNEL)" || \
-	    { echo "WARNING: $(SWU_KERNEL) not found — kernel will not be updated in this .swu"; }
+	    { echo "ERROR: $(SWU_KERNEL) not found in the deploy directory for BOARD=$(BOARD)."; exit 1; }
 	@test -n "$(DTB)" || \
-	    { echo "WARNING: $(SWU_DTB) not found — DTB will not be updated in this .swu"; }
-	@[ -n "$(KERNEL)" ] && cp "$(KERNEL)" "$(BUILD_DIR)/swu/$(SWU_KERNEL)" || true
-	@[ -n "$(DTB)" ]    && cp "$(DTB)"    "$(BUILD_DIR)/swu/$(SWU_DTB)" || true
+	    { echo "ERROR: $(SWU_DTB) not found in the deploy directory for BOARD=$(BOARD)."; exit 1; }
+	@cp "$(KERNEL)" "$(BUILD_DIR)/swu/$(SWU_KERNEL)"
+	@cp "$(DTB)"    "$(BUILD_DIR)/swu/$(SWU_DTB)"
 
 	# --- sw-description ---
 	# Issue #113: sw-description is templated on the per-board

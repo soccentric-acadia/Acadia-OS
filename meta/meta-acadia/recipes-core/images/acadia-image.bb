@@ -20,7 +20,11 @@ require recipes-extended/images/core-image-full-cmdline.bb
 IMAGE_FEATURES += "ssh-server-openssh"
 
 # OTA / swupdate
-IMAGE_INSTALL:append = " swupdate swupdate-www rpi5-swupdate-config"
+# rpi5-swupdate-config implements the inactive-slot, boot-selection, and
+# rollback flow for sdimage-rpi5.wks. Do not install it on single-rootfs
+# machines, where its /dev/swupdate-inactive contract cannot be satisfied.
+IMAGE_INSTALL:append:raspberrypi5 = " swupdate swupdate-www rpi5-swupdate-config"
+IMAGE_INSTALL:append:raspberrypi-cm5-io-board = " swupdate swupdate-www rpi5-swupdate-config"
 
 # Home partition init
 IMAGE_INSTALL:append = " rpi5-home-init"
