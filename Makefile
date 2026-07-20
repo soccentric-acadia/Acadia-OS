@@ -388,8 +388,11 @@ swu: build
 	# --- kernel + DTB (required for I3: kernel/DTB included in OTA) ---
 	# Filenames are board-specific (see SWU_KERNEL / SWU_DTB table at
 	# top of file).  Issue #63.
-	$(eval KERNEL := $(shell find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \
-	    -name "$(SWU_KERNEL)" 2>/dev/null | sort -V | tail -1))
+				$(eval KERNEL := $(shell if [ "$(BOARD)" = rpi5 ] || [ "$(BOARD)" = cm5 ]; then \
+						find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \( -name "$(SWU_KERNEL)" -o -name "Image-*.bin" \); \
+					else \
+						find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) -name "$(SWU_KERNEL)"; \
+					fi 2>/dev/null | sort -V | tail -1))
 	$(eval DTB := $(shell find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \
 	    -name "$(SWU_DTB)" 2>/dev/null | sort -V | tail -1))
 	@test -n "$(KERNEL)" || \
