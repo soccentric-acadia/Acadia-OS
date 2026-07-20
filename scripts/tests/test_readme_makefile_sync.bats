@@ -59,19 +59,19 @@ setup() {
     grep -qE '\| `clean-all`[[:space:]]+\|' "${SUT_RD}"
 }
 
-@test "#104: clean-all removes downloads/ and sstate-cache/ (README claim)" {
-    # README says clean-all removes build/, downloads/, sstate-cache/.
+@test "#104: clean-all removes cache downloads and sstate (README claim)" {
+    # README says clean-all removes build/ and the cache directories.
     # The Makefile target's body must reference all three (the
     # Makefile uses DL_DIR/SSTATE_DIR variables, whose default
-    # values point to downloads/ and sstate-cache/).
+    # values point to cache/downloads/ and cache/sstate-cache/).
     #
     # Use sed to extract the clean-all target body (until the
     # next non-indented line).  Then verify DL_DIR / SSTATE_DIR
     # are referenced.
     sed -n '/^clean-all:/,/^[^[:space:]]/p' "${SUT_MK}" | grep -qE 'DL_DIR'
     sed -n '/^clean-all:/,/^[^[:space:]]/p' "${SUT_MK}" | grep -qE 'SSTATE_DIR'
-    grep -qE '^DL_DIR[[:space:]]+\?=[[:space:]]+.*downloads' "${SUT_MK}"
-    grep -qE '^SSTATE_DIR[[:space:]]+\?=[[:space:]]+.*sstate-cache' "${SUT_MK}"
+    grep -qE '^DL_DIR[[:space:]]+\?=[[:space:]]+.*cache/downloads' "${SUT_MK}"
+    grep -qE '^SSTATE_DIR[[:space:]]+\?=[[:space:]]+.*cache/sstate-cache' "${SUT_MK}"
 }
 
 # --- #105: flash target validates DEVICE -----------------------------

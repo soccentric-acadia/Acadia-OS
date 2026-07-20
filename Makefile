@@ -126,8 +126,9 @@ endif
 
 # --- Directories -------------------------------------------------------------
 BUILD_DIR        ?= $(CURDIR)/build
-DL_DIR           ?= $(CURDIR)/downloads
-SSTATE_DIR       ?= $(CURDIR)/sstate-cache
+CACHE_DIR        ?= $(CURDIR)/cache
+DL_DIR           ?= $(CACHE_DIR)/downloads
+SSTATE_DIR       ?= $(CACHE_DIR)/sstate-cache
 DEPLOY_DIR       ?= $(CURDIR)/deploy
 
 # Single timestamp for the entire invocation — keeps all artifacts in the same
@@ -527,7 +528,7 @@ clean-build:
 clean-docker:
 	docker rmi -f $(KAS_IMAGE) $(SDK_IMAGE) $(ESDK_IMAGE) 2>/dev/null || true
 
-## Remove build/, downloads/, and sstate-cache/
+## Remove build/ and cache/downloads/ and cache/sstate-cache/
 clean-all: clean-build
 	rm -rf $(DL_DIR) $(SSTATE_DIR)
 
@@ -696,7 +697,7 @@ help:
 	@printf "\nClean:\n"
 	@printf "  %-24s %s\n" "clean"              "Remove build/"
 	@printf "  %-24s %s\n" "clean-docker"       "Remove kas/sdk/esdk Docker images"
-	@printf "  %-24s %s\n" "clean-all"          "Remove build/, downloads/, sstate-cache/"
+	@printf "  %-24s %s\n" "clean-all"          "Remove build/ and cache/downloads/ and cache/sstate-cache/"
 	@printf "\nUtilities:\n"
 	@printf "  %-24s %s\n" "completion"         "Install bash tab-completion into ~/.bashrc"
 	@printf "\nLinting:\n"

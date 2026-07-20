@@ -1,7 +1,6 @@
 # ─── Yocto build output ───────────────────────────────────────────────────────
 build/
-downloads/
-sstate-cache/
+cache/
 
 # ─── KAS artefacts ────────────────────────────────────────────────────────────
 .kas-cache/
