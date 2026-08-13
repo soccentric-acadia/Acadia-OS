@@ -1,6 +1,6 @@
 # Acadia-OS
 
-**Remote:** `git@github.com:SiliconCentric/Acadia-OS.git`
+**Remote:** `git@github.com:soccentric-acadia/Acadia-OS.git`
 **Parent project:** [Acadia](../Acadia.md) (target hardware: **Raspberry Pi 5 / CM4/CM5** (BCM2712 + RP1) app processor + **Pico W** (RP2040) real-time co-processor.)
 **Leaf type:** `<Project>-OS`
 **Status:** REAL — reference/baseline platform

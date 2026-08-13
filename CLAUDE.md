@@ -58,7 +58,7 @@ Partition table (`meta/meta-acadia/wic/sdimage-rpi5.wks`):
 | `meta-oe`           | meta-openembedded (scarthgap)      | Package set                          |
 | `meta-raspberrypi`  | meta-raspberrypi                   | RPi BSP, kernel, U-Boot              |
 | `meta-swupdate`     | sbabic/meta-swupdate (scarthgap)   | swupdate OTA framework               |
-| `meta-acadia`       | SiliconCentric/meta-acadia (local, in `meta/`) | Acadia image, HAL, swu config |
+| `meta-acadia`       | soccentric-acadia/meta-acadia (local, in `meta/`) | Acadia image, HAL, swu config |
 
 ## Repo Notes
 
