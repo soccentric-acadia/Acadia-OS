@@ -9,3 +9,26 @@ local_conf_header:
   wks: |
     # A/B OTA partition layout (same as RPi 5)
     WKS_FILE = "sdimage-rpi5.wks"
+
+  cm5-hardware: |
+    # ── CM5 wireless distinction (task.md Connectivity) ──────────────────────
+    # CM5 Lite / no-wireless SKUs have no on-module WiFi/BT.  The rpi5
+    # machine conf pulls linux-firmware-rpidistro-bcm4345x + bluez firmware
+    # via MACHINE_EXTRA_RRECOMMENDS; on a no-wireless CM5 those firmware
+    # blobs are inert (no radio present) but harmless.  For a strict
+    # no-wireless profile, remove them here:
+    #   MACHINE_EXTRA_RRECOMMENDS:remove = "linux-firmware-rpidistro-bcm43455 bluez-firmware-rpidistro-bcm4345c0-hcd linux-firmware-rpidistro-bcm43456 bluez-firmware-rpidistro-bcm4345c5-hcd"
+    # and add an external USB/M.2 WiFi+BT module instead.
+
+    # ── PCIe Gen3 opt-in (task.md Connectivity / Storage-Boot) ───────────────
+    # CM5 IO Board exposes PCIe; opt in to Gen3 for NVMe boot/throughput.
+    RPI_EXTRA_CONFIG:append = " \
+        dtparam=pciex1_gen=3 \
+    "
+
+    # ── Camera / media GPU memory (task.md Camera-Video) ────────────────────
+    GPU_MEM = "${GPU_MEM_CAMERA}"
+
+    # ── Full KMS (task.md Camera-Video / Display) ───────────────────────────
+    VC4DTBO = "vc4-kms-v3d"
+    MACHINE_FEATURES:append = " vc4graphics"

@@ -26,6 +26,41 @@ local_conf_header:
     # Raspberry Pi family.  If a future BSP port needs it, add a
     # comment here explaining which BSP — see issue #93.
 
+    # ── Hardware enablement overlays (task.md) ────────────────────────────────
+    # These dtoverlay/dtparam lines are appended to /boot/config.txt via
+    # RPI_EXTRA_CONFIG (meta-raspberrypi's rpi-config recipe).  Each closes a
+    # task.md checklist item:
+    #   w1-gpio        → 1-Wire bus for temperature probes (GPIO/Sensors)
+    #   pwm            → PWM for actuator/motor control (GPIO/Sensors)
+    #   mcp2515-can0   → SPI CAN transceiver (GPIO/Sensors)
+    #   rpi-poe        → PoE+ HAT fan/power negotiation (Power/Thermal)
+    #   gpio-shutdown  → soft-shutdown power button (Power/Thermal)
+    #   i2c-rtc        → RTC battery header (Power/Thermal)
+    #   vc4-kms-v3d    → full KMS (pinned per-board; see kas/boards/*.yaml)
+    # Override per-deployment by setting RPI_EXTRA_CONFIG in a board's
+    # local_conf_header (or on the make command line).
+    RPI_EXTRA_CONFIG ?= " \
+        dtoverlay=w1-gpio \
+        dtoverlay=pwm \
+        dtoverlay=mcp2515-can0,oscillator=16000000,interrupt=25 \
+        dtoverlay=rpi-poe \
+        dtoverlay=gpio-shutdown \
+        dtoverlay=i2c-rtc,pcf8523 \
+    "
+
+    # ── Camera / media GPU memory split (task.md Camera-Video) ───────────────
+    # A larger GPU_MEM is required for the camera ISP/Unicam pipeline and
+    # hardware video decode.  The base 128 MB is kept for headless/industrial
+    # profiles; camera deployments should raise this (e.g. 256) per board.
+    GPU_MEM_CAMERA ?= "256"
+
+    # ── HEVC / H.265 decode license flag (task.md Camera-Video) ──────────────
+    # GStreamer's stateless V4L2 HEVC decoder and ffmpeg's HEVC path are
+    # covered by the 'commercial' license flag in poky.  Accept it here so
+    # the H.265 decode packages build; override per-deployment if a
+    # deployment must not ship the commercial codec.
+    LICENSE_FLAGS_ACCEPTED ?= "commercial"
+
     # Shared caches (bind-mounted by Docker)
     DL_DIR     ?= "${TOPDIR}/../cache/downloads"
     SSTATE_DIR ?= "${TOPDIR}/../cache/sstate-cache"
@@ -55,7 +90,9 @@ local_conf_header:
     # a board's local_conf_header (or LICENSE_FLAGS_ACCEPTED on the make
     # command line) if a recipe's LICENSE_FLAGS trips a build failure —
     # e.g. proprietary firmware or a commercially-licensed codec.
-    LICENSE_FLAGS_ACCEPTED ?= ""
+    # (The 'commercial' flag is accepted above for the HEVC/H.265 decode
+    # path; see the Camera/Video section.)
+    LICENSE_FLAGS_ACCEPTED ?= "commercial"
 
     # Ptest package and runner support (feature.txt §6 / §12). Requires
     # "ptest" in DISTRO_FEATURES so recipes build their -ptest packages;

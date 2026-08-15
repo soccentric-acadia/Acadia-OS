@@ -14,3 +14,6 @@ repos:
       meta-python:
       meta-networking:
       meta-multimedia:
+      # meta-filesystems provides owfs (1-Wire) used by the sensor stack
+      # (task.md GPIO/Sensors/Industrial IO).
+      meta-filesystems:

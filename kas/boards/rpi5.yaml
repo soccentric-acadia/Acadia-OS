@@ -9,3 +9,23 @@ local_conf_header:
   wks: |
     # A/B OTA partition layout (see meta-acadia/wic/sdimage-rpi5.wks)
     WKS_FILE = "sdimage-rpi5.wks"
+
+  rpi5-hardware: |
+    # ── PCIe Gen3 opt-in (task.md Connectivity / Storage-Boot) ────────────────
+    # RPi5/CM5 expose a PCIe 2.0 x1 link by default.  Opt in to Gen3 for
+    # NVMe boot/throughput.  Requires a Gen3-capable NVMe adapter.
+    RPI_EXTRA_CONFIG:append = " \
+        dtparam=pciex1_gen=3 \
+    "
+
+    # ── Camera / media GPU memory (task.md Camera-Video) ────────────────────
+    # Raise GPU_MEM for the camera ISP/Unicam pipeline and hardware video
+    # decode on the Pi5.  Override per-deployment if headless.
+    GPU_MEM = "${GPU_MEM_CAMERA}"
+
+    # ── Full KMS (task.md Camera-Video / Display) ───────────────────────────
+    # Pin vc4-kms-v3d (full KMS) for dual 4Kp60 HDMI and MIPI DSI.  The
+    # machine conf already defaults VC4DTBO=vc4-kms-v3d; make it explicit
+    # and enable the VC4 graphics feature so the KMS stack is built.
+    VC4DTBO = "vc4-kms-v3d"
+    MACHINE_FEATURES:append = " vc4graphics"
