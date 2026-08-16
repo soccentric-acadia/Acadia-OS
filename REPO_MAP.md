@@ -11,7 +11,8 @@ via `swupdate`. This is the **reference** for the fleet: other platforms
 (Zion/Joshua/Pinnacle/Sequoia) are documented as ports of this repo.
 
 **Board:** default `rpi5`. Platform customization lives in
-`meta/meta-acadia` (committed locally); upstream layers (`poky`,
+`meta/meta-acadia`, a nested clone of its own upstream
+`soccentric-acadia/meta-acadia` (fetched by kas); upstream layers (`poky`,
 `meta-openembedded`, `meta-raspberrypi`, `meta-swupdate`) are checked out by
 kas into a **gitignored** `layers/` directory and must never be hand-edited.
 
@@ -28,7 +29,8 @@ SD/eMMC → RPi firmware (config.txt) → U-Boot → kernel_2712.img
 swupdate), `data` (`/home`, persistent). See
 `meta/meta-acadia/wic/sdimage-rpi5.wks`.
 
-**Local layer:** `meta/meta-acadia` is committed in-repo (see `.gitignore`).
+**Local layer:** `meta/meta-acadia` is a nested clone with its own upstream
+at `soccentric-acadia/meta-acadia.git` (see `.gitignore`).
 
 ---
 Part of the `Acadia` project in the `project-managers` fleet. See

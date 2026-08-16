@@ -46,11 +46,7 @@ Thumbs.db
 *.log
 
 deploy/
-# meta/ holds the meta-acadia Yocto layer, which historically was
-# committed to this repo before the layer-fetch was wired through
-# kas/repos/. Re-enable tracking here so layer fixes (e.g. the C1
-# OTA rollback chain) can be reviewed and merged via PR.
-# See issues/C1-ota-rollback-incomplete.md for context.
+# meta/ holds the meta-acadia Yocto layer, now fetched by kas from its own
+# upstream (soccentric-acadia/meta-acadia) and checked out here as a nested
+# clone — never tracked in this repo.
 meta/*
-!meta/meta-acadia/
-!meta/meta-acadia/**

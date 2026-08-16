@@ -2,12 +2,12 @@ header:
   version: 14
 
 repos:
-  # In-tree project layer.  This repo (the one containing the kas
-  # config) is referenced with no `url`, so kas adds the layer that
-  # lives alongside the kas files instead of cloning it.  The previous
-  # external fetch was dropped in #71 ("Acaida" typo); the layer was
-  # never re-registered, which is why bitbake reported
-  # "Nothing PROVIDES 'acadia-image'".
+  # Project layer, now hosted in its own upstream repo and fetched by kas
+  # into meta/meta-acadia as a nested clone (same pattern as Zion/Arches).
+  # See docs/Acadia/Acadia-OS.md for the layer structure.
   meta-acadia:
+    url: git@github.com:soccentric-acadia/meta-acadia.git
+    branch: develop
+    path: meta/meta-acadia
     layers:
-      meta/meta-acadia:
+      .:
