@@ -2,13 +2,31 @@
 
 ## Project Description
 
-Acadia-OS is reserved for the Acadia embedded operating-system and board-support deliverables. In the current checkout there is no committed source tree, Yocto layer, kernel configuration, device-tree implementation, boot artifact, service definition, test suite, or executable build target to summarize. The repository directory exists as a planning boundary alongside Acadia-Hardware, Acadia-HAL, Acadia-Client, Acadia-Configuration, Acadia-Server, Acadia-Dashboard, and Acadia-PySDK, but the implementation evidence needed to describe runtime behavior is absent.
+Acadia-OS is reserved for the Acadia embedded operating-system and board-support deliverables.
+In the current checkout there is no committed source tree, Yocto layer, kernel configuration,
+device-tree implementation, boot artifact, service definition, test suite, or executable build
+target to summarize. The repository directory exists as a planning boundary alongside
+Acadia-Hardware, Acadia-HAL, Acadia-Client, Acadia-Configuration, Acadia-Server,
+Acadia-Dashboard, and Acadia-PySDK, but the implementation evidence needed to describe runtime
+behavior is absent.
 
-The intended responsibility is the software image that boots the Acadia board and provides the platform contract consumed by higher layers: boot configuration, kernel and device-tree support, filesystem/image assembly, system services, networking, update hooks, security posture, and board-specific integration. Those responsibilities must remain hypotheses until files and build metadata are committed. No board processor, co-processor, peripheral mapping, package set, or deployment image should be treated as implemented merely because neighboring repositories mention it.
+The intended responsibility is the software image that boots the Acadia board and provides the
+platform contract consumed by higher layers: boot configuration, kernel and device-tree support,
+filesystem/image assembly, system services, networking, update hooks, security posture, and
+board-specific integration. Those responsibilities must remain hypotheses until files and build
+metadata are committed. No board processor, co-processor, peripheral mapping, package set, or
+deployment image should be treated as implemented merely because neighboring repositories
+mention it.
 
-The useful workflow is repository planning and dependency alignment. Hardware facts should come from Acadia-Hardware once its EDA design is committed; peripheral interfaces should be validated against Acadia-HAL; and service/client assumptions should be coordinated with Configuration and Server. When implementation lands, this README should document image recipes, supported machines, prerequisites, reproducible commands, artifacts, boot/update flow, and test evidence. Until then, every feature below is deliberately marked planned or unknown, and no manual verification is claimed.
+The useful workflow is repository planning and dependency alignment. Hardware facts should come
+from Acadia-Hardware once its EDA design is committed; peripheral interfaces should be validated
+against Acadia-HAL; and service/client assumptions should be coordinated with Configuration and
+Server. When implementation lands, this README should document image recipes, supported
+machines, prerequisites, reproducible commands, artifacts, boot/update flow, and test evidence.
+Until then, every feature below is deliberately marked planned or unknown, and no manual
+verification is claimed.
 
-## Feature Matrix
+## Feature Status
 
 | # | Name / Description | Implemented? | Test Coverage? | Manual Test |
 |---:|---|---|---|---|
@@ -24,4 +42,5 @@ The useful workflow is repository planning and dependency alignment. Hardware fa
 
 ## Limitations
 
-This is an evidence-based inventory of an empty implementation surface, not a claim that the planned OS exists. No OS build or test command is currently available.
+This is an evidence-based inventory of an empty implementation surface, not a claim that the
+planned OS exists. No OS build or test command is currently available.
