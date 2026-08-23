@@ -2,9 +2,9 @@ name: Build Acadia OS
 
 on:
   push:
-    branches: [main, scarthgap]
+    branches: [develop, master]
   pull_request:
-    branches: [main, scarthgap]
+    branches: [develop, master]
   # Allow manual trigger for testing builds against a specific board
   workflow_dispatch:
     inputs:
