@@ -172,6 +172,7 @@ _ESDK_IMAGE_TAG  := $(lastword  $(subst :, ,$(ESDK_IMAGE)))
         esdk-image ensure-esdk-image \
         kas-container-script shell flash sdk esdk swu \
         deploy-images deploy-sdk deploy-esdk deploy-swu \
+        checksums verify \
         clean clean-build clean-docker clean-all \
         completion help \
 		lint lint-makefile lint-yaml lint-swupdate-sync lint-reproducibility \
@@ -477,7 +478,8 @@ deploy-images:
 	 find "$$src" -maxdepth 1 \( -type f -o -type l \) \
 	     \( -name "*.wic.bz2" -o -name "*.wic.bmap" \) \
 	     -exec cp -L {} "$$out/" \;; \
-	 echo "  Done: $$out"
+	 echo "  Done: $$out"; \
+	 $(MAKE) --no-print-directory checksums DEPLOY_DIR=$$out
 
 ## Copy cross-toolchain SDK installer → deploy/sdk/BOARD_TS/
 deploy-sdk:
@@ -509,7 +511,38 @@ deploy-swu:
 	 echo "Deploying SWU → $$out ..."; \
 	 mkdir -p "$$out"; \
 	 cp -L "$(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu" "$$out/"; \
-	 echo "  Done: $$out"
+	 echo "  Done: $$out"; \
+	 $(MAKE) --no-print-directory checksums DEPLOY_DIR=$$out
+
+# -----------------------------------------------------------------------------
+# Image verification (task 5)
+# -----------------------------------------------------------------------------
+## Write SHA-256 checksums for every artifact in a deploy directory into a
+## SHA256SUMS manifest. This is the single canonical image-verification path:
+## removable media (.wic.bz2/.bmap), OTA (.swu), and any staged installer
+## share one mechanism (SHA-256 + published manifest) that preflight, QA, and
+## acceptance all enforce.
+## Usage: make checksums DEPLOY_DIR=deploy/images/rpi5_<TS>
+checksums:
+	@[ -n "$(DEPLOY_DIR)" ] || { echo "ERROR: DEPLOY_DIR is required"; exit 1; }
+	@test -d "$(DEPLOY_DIR)" || { echo "ERROR: $(DEPLOY_DIR) does not exist"; exit 1; }
+	@echo "Writing SHA-256 manifest for $(DEPLOY_DIR)"
+	@cd "$(DEPLOY_DIR)" && \
+	  find . -maxdepth 1 -type f ! -name SHA256SUMS | sort | \
+	  xargs -r sha256sum > SHA256SUMS
+	@echo "  Manifest: $(DEPLOY_DIR)/SHA256SUMS"
+
+## Verify a deploy directory against its SHA-256 manifest. Exits non-zero if
+## any artifact is missing, modified, or if no manifest exists. This is the
+## check preflight/QA/acceptance invoke to prove the image bytes are the
+## exact ones produced by the build.
+## Usage: make verify DEPLOY_DIR=deploy/images/BOARD_TS
+verify:
+	@[ -n "$(DEPLOY_DIR)" ] || { echo "error: DEPLOY_DIR is required"; exit 1; }
+	@test -f "$(DEPLOY_DIR)/SHA256SUMS" || { echo "FAIL: no SHA256SUMS manifest in $(DEPLOY_DIR)"; exit 1; }
+	@echo "Verifying image integrity in $(DEPLOY_DIR) ..."
+	@cd "$(DEPLOY_DIR)" && sha256sum -c SHA256SUMS
+	@echo "OK: all artifacts match the SHA-256 manifest"
 
 # -----------------------------------------------------------------------------
 # Clean targets
@@ -692,6 +725,8 @@ help:
 	@printf "  %-24s %s\n" "deploy-sdk"         "Copy SDK installer   → deploy/sdk/BOARD_TS/"
 	@printf "  %-24s %s\n" "deploy-esdk"        "Copy eSDK installer  → deploy/esdk/BOARD_TS/"
 	@printf "  %-24s %s\n" "deploy-swu"         "Copy .swu package    → deploy/swu/BOARD_TS/"
+	@printf "  %-24s %s\n" "checksums"          "Write SHA-256 manifest for a deploy dir (DEPLOY_DIR=)"
+	@printf "  %-24s %s\n" "verify"             "Verify a deploy dir against its SHA-256 manifest (DEPLOY_DIR=)"
 	@printf "\nClean:\n"
 	@printf "  %-24s %s\n" "clean"              "Remove build/"
 	@printf "  %-24s %s\n" "clean-docker"       "Remove kas/sdk/esdk Docker images"
