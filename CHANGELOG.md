@@ -8,7 +8,9 @@
   (`gstreamer1.0-plugins-base/good/bad`, `gstreamer1.0-libav`) + `ffmpeg` for
   H.265/HEVC decode; `v4l2codecs` PACKAGECONFIG enabled via a new
   `gstreamer1.0-plugins-bad` bbappend; `commercial` license flag accepted in
-  `kas/common.yaml`.
+  `kas/common.yaml`.  `acadia-camera` gains a `MODE=udp` V4L2-to-RTP/JPEG
+  streaming bridge (using only `gstreamer1.0-plugins-good`) for IV&V
+  camera-feed capture pipelines (task.md Camera-Video).
 - **Display**: `kmscube` + `libdrm-tests` (modetest); `vc4-kms-v3d` pinned and
   `vc4graphics` enabled per-board.
 - **Audio**: `alsa-utils` (aplay/arecord/speaker-test).

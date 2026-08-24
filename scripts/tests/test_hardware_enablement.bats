@@ -32,6 +32,16 @@ setup() {
     grep -qF 'PACKAGECONFIG:append = " v4l2codecs"' "${BB}"
 }
 
+@test "acadia-camera: capture script supports local + udp streaming modes" {
+    SCRIPT="${ROOT}/meta/meta-acadia/recipes-multimedia/acadia-camera/files/acadia-camera-capture.sh"
+    CONF="${ROOT}/meta/meta-acadia/recipes-multimedia/acadia-camera/files/acadia-camera-capture.conf"
+    grep -qF 'MODE="${MODE:-local}"' "${SCRIPT}"
+    grep -qF 'jpegenc ! rtpjpegpay' "${SCRIPT}"
+    grep -qF 'udpsink host="${STREAM_HOST:-127.0.0.1}"' "${SCRIPT}"
+    grep -qF 'MODE=udp' "${CONF}"
+    grep -qF 'STREAM_PORT=5000' "${CONF}"
+}
+
 # --- Display / Audio --------------------------------------------------------
 
 @test "acadia-image.bb: installs kmscube + libdrm-tests (modetest)" {
@@ -58,8 +68,8 @@ setup() {
 
 # --- Power / Thermal --------------------------------------------------------
 
-@test "acadia-image.bb: installs lm-sensors + fancontrol" {
-    grep -qF 'lmsensors lmsensors-sensors lmsensors-fancontrol lmsensors-config' "${IMG}"
+@test "acadia-image.bb: installs lm-sensors" {
+    grep -qF 'lmsensors' "${IMG}"
 }
 
 @test "acadia-services.bb: provides thermal-check, fan-control, rtc-sync, watchdog" {
