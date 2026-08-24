@@ -6,6 +6,7 @@ header:
     - repos/meta-raspberrypi.yaml
     - repos/meta-swupdate.yaml
     - repos/meta-acadia.yaml
+    - repos/meta-webconfig.yaml
 
 distro: poky
 target: acadia-image

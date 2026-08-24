@@ -1,0 +1,12 @@
+header:
+  version: 14
+
+repos:
+  # WebConfig on-device layer from the Acadia-Configuration repo. Adds the
+  # webconfigd daemon, static frontend, schemas, and board manifest to the image.
+  meta-webconfig:
+    url: git@github.com:soccentric-acadia/Acadia-Configuration.git
+    branch: develop
+    path: meta/meta-webconfig
+    layers:
+      .:
