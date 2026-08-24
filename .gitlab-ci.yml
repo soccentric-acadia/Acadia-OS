@@ -1,0 +1,19 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+stages: [validate]
+
+metadata-and-lint:
+  stage: validate
+  image: ubuntu:24.04
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends make grep sed diffutils
+  script:
+    - make help >/dev/null
+    - make lint-makefile
+    - make lint-reproducibility
+    - make check-board
+    - make test
