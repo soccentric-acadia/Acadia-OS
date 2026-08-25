@@ -172,7 +172,7 @@ _ESDK_IMAGE_TAG  := $(lastword  $(subst :, ,$(ESDK_IMAGE)))
         esdk-image ensure-esdk-image \
         kas-container-script shell flash sdk esdk swu \
         deploy-images deploy-sdk deploy-esdk deploy-swu \
-        checksums verify \
+        checksums verify verify-swu \
         clean clean-build clean-docker clean-all \
         completion help \
 		lint lint-makefile lint-yaml lint-swupdate-sync lint-reproducibility \
@@ -515,6 +515,27 @@ deploy-swu:
 	 echo "  Done: $$out"; \
 	 $(MAKE) --no-print-directory checksums DEPLOY_DIR=$$out
 
+## Verify the signature of a built .swu against the committed public key
+## (task 44). Extracts sw-description + sw-description.sig from the cpio and
+## runs openssl dgst -verify with the public key the target bakes in. Fails if
+## the bundle is unsigned or its signature does not validate.
+## Usage: make verify-swu SWU_FILE=build/rpi5-<ts>.swu
+verify-swu:
+	@[ -n "$(SWU_FILE)" ] || { echo "error: SWU_FILE is required"; exit 1; }
+	@test -f "$(SWU_FILE)" || { echo "error: $(SWU_FILE) not found"; exit 1; }
+	@pub="meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/swupdate-public.pem"; \
+	 work="$$(mktemp -d)"; \
+	 trap 'rm -rf "$$work"' EXIT; \
+	 echo "Extracting signature bundle from $(SWU_FILE) ..."; \
+	 cd "$$work" && cpio -id --quiet sw-description sw-description.sig < "$(SWU_FILE)" 2>/dev/null \
+	   || { echo "error: could not extract sw-description/sig"; exit 1; }; \
+	 if [ ! -f sw-description.sig ]; then \
+	   echo "error: $(SWU_FILE) is UNSIGNED (no sw-description.sig)"; exit 1; \
+	 fi; \
+	 if ! openssl dgst -sha256 -verify "$(CURDIR)/$$pub" -signature sw-description.sig sw-description; then \
+	   echo "error: signature verification FAILED against public key"; exit 1; fi; \
+	 echo "OK: $(SWU_FILE) signature verified against swupdate-public.pem"
+
 # -----------------------------------------------------------------------------
 # Image verification (task 5)
 # -----------------------------------------------------------------------------
@@ -738,6 +759,7 @@ help:
 	@printf "  %-24s %s\n" "deploy-swu"         "Copy .swu package    → deploy/swu/BOARD_TS/"
 	@printf "  %-24s %s\n" "checksums"          "Write SHA-256 manifest for a deploy dir (DEPLOY_DIR=)"
 	@printf "  %-24s %s\n" "verify"             "Verify a deploy dir against its SHA-256 manifest (DEPLOY_DIR=)"
+	@printf "  %-24s %s\n" "verify-swu"         "Verify a .swu signature against the committed public key (SWU_FILE=)"
 	@printf "\nClean:\n"
 	@printf "  %-24s %s\n" "clean"              "Remove build/"
 	@printf "  %-24s %s\n" "clean-docker"       "Remove kas/sdk/esdk Docker images"

@@ -85,6 +85,18 @@ jobs:
             build/tmp/deploy/images/**/*.wic.bmap
           retention-days: 14
 
+      # Task 44: verify the built .swu's signature against the committed public
+      # key.
+      - name: Verify signed SWU bundle
+        if: always()
+        run: |
+          SWU=$(find build -name '*.swu' 2>/dev/null | head -1)
+          if [ -n "$SWU" ]; then
+            make verify-swu SWU_FILE="$SWU"
+          else
+            echo "no .swu produced in this build; signature verification skipped"
+          fi
+
       - name: Upload build logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
