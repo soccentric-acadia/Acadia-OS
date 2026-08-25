@@ -1,12 +1,11 @@
 header:
   version: 14
   includes:
-    - repos/poky.yaml
-    - repos/meta-openembedded.yaml
-    - repos/meta-raspberrypi.yaml
-    - repos/meta-swupdate.yaml
-    - repos/meta-acadia.yaml
-    - repos/meta-webconfig.yaml
+  - repos/poky.yaml
+  - repos/meta-openembedded.yaml
+  - repos/meta-raspberrypi.yaml
+  - repos/meta-swupdate.yaml
+  - repos/meta-acadia.yaml
 
 distro: poky
 target: acadia-image
@@ -77,7 +76,7 @@ local_conf_header:
     UBOOT_ENV = "boot"
     MACHINE_FEATURES:append = " u-boot"
     RPI_USE_U_BOOT = "1"
-    
+
     # Enable bootcount in U-Boot
     UBOOT_MACHINE = "rpi_arm64_defconfig"
     EXTRA_IMAGEDEPENDS += "u-boot"
