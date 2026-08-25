@@ -176,7 +176,8 @@ _ESDK_IMAGE_TAG  := $(lastword  $(subst :, ,$(ESDK_IMAGE)))
         clean clean-build clean-docker clean-all \
         completion help \
 		lint lint-makefile lint-yaml lint-swupdate-sync lint-reproducibility \
-        test validate check-board
+        test validate check-board \
+        test-target
 
 all: build
 
@@ -655,6 +656,16 @@ test:
 	    && echo "  OK: curl found ($$(curl --version | head -1))" \
 	    || { echo "  FAIL: curl not found in PATH"; exit 1; }
 	@echo "All prerequisites satisfied."
+
+## Target-required network integration tests (task 32). Run on a booted image;
+## skips (target-required) on a host without the target link.
+test-target: ## Run target-required network/modem bats tests against a booted image
+	@if command -v bats >/dev/null 2>&1; then \
+		bats meta/meta-acadia/recipes-connectivity/rpi5-connectivity/tests \
+			meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/tests; \
+	else \
+		echo "bats not installed — target tests skipped (target-required)"; \
+	fi
 
 ## Validate every board's kas configuration: the file exists and has a
 ## non-empty 'machine:' field (feature.txt §12: "Automatic validation of

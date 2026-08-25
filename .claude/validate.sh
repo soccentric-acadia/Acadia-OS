@@ -36,4 +36,8 @@ assert "rpi5-connectivity enables systemd-networkd + resolved" \
 
 check "BitBake metadata parse" "docker" 'make validate'
 
+# Target-required network/modem tests (task 32). They skip on hosts; only a
+# real booted target exercises them.
+check "target network/modem tests" "bats" 'make test-target'
+
 report "$TIER"
