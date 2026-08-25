@@ -175,7 +175,7 @@ _ESDK_IMAGE_TAG  := $(lastword  $(subst :, ,$(ESDK_IMAGE)))
         checksums verify verify-swu \
         clean clean-build clean-docker clean-all \
         completion help \
-		lint lint-makefile lint-yaml lint-swupdate-sync lint-reproducibility \
+		lint lint-makefile lint-yaml lint-swupdate-sync lint-reproducibility lint-hardening \
         test validate check-board \
         test-target
 
@@ -648,6 +648,11 @@ lint-reproducibility:
 	    exit 1; \
 	fi; \
 	echo "  OK: no AUTOREV SRCREV values found"
+
+## Production image hardening gate (task 53): debug tooling gated, no
+## empty-root/debug-tweaks, sshd not permitting password/root login.
+lint-hardening:
+	@bash scripts/harden-image-check.sh
 
 ## Validate Makefile syntax — parses the full Makefile (all includes,
 ## conditionals, and variable expansions) without executing any recipe.
