@@ -25,6 +25,11 @@ check "Makefile parses" "make" 'make -pn >/dev/null 2>&1'
 check "board configs have a MACHINE field" "" 'make check-board'
 check "swupdate sync (pre/post-install drift)" "" 'make lint-swupdate-sync'
 
+# Task 31: systemd-networkd owns networking (contract doc/network-manager-contract.md).
+assert "rpi5-connectivity enables systemd-networkd + resolved" \
+  'grep -q "systemd-networkd" meta/meta-acadia/recipes-connectivity/rpi5-connectivity/files/80-rpi5-connectivity.preset \
+   && grep -q "systemd-resolved" meta/meta-acadia/recipes-connectivity/rpi5-connectivity/files/80-rpi5-connectivity.preset'
+
 [ "$TIER" = "quick" ] && { report "$TIER"; exit $?; }
 
 # --- full ------------------------------------------------------------------
