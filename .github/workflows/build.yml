@@ -126,6 +126,18 @@ jobs:
             echo "no .swu produced in this build; signature verification skipped"
           fi
 
+      # Task 55: retain release recovery evidence (commit, checksums, swu sig,
+      # rollback pointers) with the artifacts.
+      - name: Emit release evidence manifest
+        if: always()
+        run: |
+          DEP=$(ls -d deploy/images/* 2>/dev/null | head -1)
+          if [ -n "$DEP" ]; then
+            make release-evidence DEPLOY_DIR="$DEP"
+          else
+            echo "no deploy dir; release evidence skipped"
+          fi
+
       - name: Upload build logs on failure
         if: failure()
         uses: actions/upload-artifact@v4

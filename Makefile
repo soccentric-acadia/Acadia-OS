@@ -172,7 +172,7 @@ _ESDK_IMAGE_TAG  := $(lastword  $(subst :, ,$(ESDK_IMAGE)))
         esdk-image ensure-esdk-image \
         kas-container-script shell flash sdk esdk swu \
         deploy-images deploy-sdk deploy-esdk deploy-swu \
-        checksums verify verify-swu \
+        checksums verify verify-swu release-evidence \
         clean clean-build clean-docker clean-all \
         completion help \
 		lint lint-makefile lint-yaml lint-swupdate-sync lint-reproducibility lint-hardening \
@@ -565,6 +565,29 @@ verify:
 	@echo "Verifying image integrity in $(DEPLOY_DIR) ..."
 	@cd "$(DEPLOY_DIR)" && sha256sum -c SHA256SUMS
 	@echo "OK: all artifacts match the SHA-256 manifest"
+
+## Emit a release evidence manifest (task 55): source commit, board, checksums,
+## SBOM presence, and rollback/verify pointers — what a release must retain so
+## recovery/rollback is reproducible.
+## Usage: make release-evidence DEPLOY_DIR=deploy/images/BOARD_TS [SWU_FILE=...]
+release-evidence:
+	@[ -n "$(DEPLOY_DIR)" ] || { echo "error: DEPLOY_DIR is required"; exit 1; }
+	@test -d "$(DEPLOY_DIR)" || { echo "error: $(DEPLOY_DIR) does not exist"; exit 1; }
+	@sha="$$(git rev-parse HEAD 2>/dev/null)"; \
+	 ts="$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
+	 out="$(DEPLOY_DIR)/RELEASE.json"; \
+	 echo "Writing release evidence -> $$out"; \
+	 printf '{\n  "board": "$(BOARD)",\n' > "$$out"; \
+	 printf '  "source_commit": "%s",\n' "$$sha" >> "$$out"; \
+	 printf '  "timestamp": "%s",\n' "$$ts" >> "$$out"; \
+	 printf '  "checksums": "SHA256SUMS",\n' >> "$$out"; \
+	 if [ -n "$(SWU_FILE)" ] && [ -f "$(SWU_FILE)" ]; then \
+	   printf '  "swu": "%s",\n' "$(SWU_FILE)" >> "$$out"; \
+	   printf '  "signature_verified": "see make verify-swu",\n' >> "$$out"; \
+	 fi; \
+	 printf '  "rollback": "boot-update-contract.md / ROLLBACK_VALIDATION.md"\n' >> "$$out"; \
+	 printf '}\n' >> "$$out"; \
+	 echo "  Done: $$out"
 
 # -----------------------------------------------------------------------------
 # Clean targets
