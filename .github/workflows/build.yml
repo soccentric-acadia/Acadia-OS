@@ -33,6 +33,8 @@ jobs:
         run: |
           make lint-swupdate-sync || true
           make lint-reproducibility || true
+      - name: Production image hardening (task 53)
+        run: make lint-hardening
       - name: kas configs are valid YAML
         run: |
           python3 - <<'PY'
