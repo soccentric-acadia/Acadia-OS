@@ -94,3 +94,21 @@ jobs:
             build/tmp/log/
             build/tmp/work/**/temp/log.*
           retention-days: 7
+
+  secret-scan:
+    name: OTA signing secret scan + key hygiene (task 43)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: No private SWUpdate key committed
+        run: |
+          if grep -rIlE -- '-----BEGIN RSA PRIVATE KEY-----' meta/ 2>/dev/null | grep -v 'files/swupdate-public.pem' | grep -q .; then
+            echo "private SWU key found in tree"; exit 1
+          fi
+          echo "clean: no private SWU key committed"
+      - name: Public key present and valid PEM
+        run: |
+          test -f meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/swupdate-public.pem
+          openssl rsa -pubin -in meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/swupdate-public.pem -noout 2>/dev/null \
+            && echo "public key is a valid RSA public PEM" \
+            || { echo "public key is not a valid RSA public PEM"; exit 1; }
