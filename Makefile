@@ -11,6 +11,8 @@
 #   KAS_IMAGE  = $(BOARD)-kas:latest
 #   SDK_IMAGE  = $(BOARD)-sdk:latest
 #   ESDK_IMAGE = $(BOARD)-esdk:latest
+.DEFAULT_GOAL := help
+
 KAS_IMAGE        ?= $(BOARD)-kas:latest
 SDK_IMAGE        ?= $(BOARD)-sdk:latest
 ESDK_IMAGE       ?= $(BOARD)-esdk:latest
@@ -199,14 +201,14 @@ kas-container-script:
 # -----------------------------------------------------------------------------
 
 ## Build (or rebuild) the KAS Yocto build container (docker/yocto/)
-kas-image:
+kas-image: ## Build/rebuild KAS build container  (docker/yocto/)
 	$(MAKE) -C docker/yocto \
 	    IMAGE_NAME=$(_KAS_IMAGE_NAME) \
 	    IMAGE_TAG=$(_KAS_IMAGE_TAG) \
 	    KAS_VERSION=$(KAS_VERSION)
 
 ## Build the KAS image only when it is absent (used internally by build/shell/sdk/esdk)
-ensure-image:
+ensure-image: ## Build KAS image only when absent
 	@command -v docker >/dev/null 2>&1 || { \
 	    echo "ERROR: 'docker' not found in PATH.  Install Docker (or set KAS_CONTAINER_ENGINE=podman)."; \
 	    exit 1; }
@@ -216,7 +218,7 @@ ensure-image:
 
 ## Build the Yocto SD card image for BOARD — alias for build
 ## Usage: make image rpi5
-image: build
+image: build ## Build Yocto SD card image for BOARD  (alias for build)
 
 ## Full chain: Yocto SDK build → stage installer → docker build → deploy
 ##   Step 1  ensure the KAS build container is present
@@ -224,7 +226,7 @@ image: build
 ##   Step 3  locate and stage the SDK installer into docker/sdk/sdk.sh
 ##   Step 4  build the SDK Docker image
 ##   Step 5  deploy SDK artifacts to deploy/sdk/BOARD_TS/
-sdk-image: ensure-image kas-container-script
+sdk-image: ensure-image kas-container-script ## Full chain: SDK build → stage → docker build → deploy
 	@echo ""
 	@echo "======================================================================"
 	@echo " sdk-image: building Yocto SDK + Docker image for $(SDK_IMAGE)"
@@ -262,7 +264,7 @@ sdk-image: ensure-image kas-container-script
 ##   Step 3  locate and stage the eSDK installer into docker/esdk/esdk.sh
 ##   Step 4  build the eSDK Docker image
 ##   Step 5  deploy eSDK artifacts to deploy/esdk/BOARD_TS/
-esdk-image: ensure-image kas-container-script
+esdk-image: ensure-image kas-container-script ## Full chain: eSDK build → stage → docker build → deploy
 	@echo ""
 	@echo "======================================================================"
 	@echo " esdk-image: building Yocto eSDK + Docker image for $(ESDK_IMAGE)"
@@ -295,7 +297,7 @@ esdk-image: ensure-image kas-container-script
 	@echo ""
 
 ## Build the SDK Docker image only when it is absent
-ensure-sdk-image:
+ensure-sdk-image: ## Run sdk-image chain only when image is absent
 	@command -v docker >/dev/null 2>&1 || { \
 	    echo "ERROR: 'docker' not found in PATH.  Install Docker (or set KAS_CONTAINER_ENGINE=podman)."; \
 	    exit 1; }
@@ -304,7 +306,7 @@ ensure-sdk-image:
 	         $(MAKE) sdk-image; }
 
 ## Build the eSDK Docker image only when it is absent
-ensure-esdk-image:
+ensure-esdk-image: ## Run esdk-image chain only when image is absent
 	@command -v docker >/dev/null 2>&1 || { \
 	    echo "ERROR: 'docker' not found in PATH.  Install Docker (or set KAS_CONTAINER_ENGINE=podman)."; \
 	    exit 1; }
@@ -317,38 +319,38 @@ ensure-esdk-image:
 # -----------------------------------------------------------------------------
 
 ## Build the Yocto image for the selected BOARD (default target)
-build: ensure-image kas-container-script
+build: ensure-image kas-container-script ## Build Yocto SD card image for BOARD
 	@mkdir -p $(BUILD_DIR) $(DL_DIR) $(SSTATE_DIR)
 	$(KAS_RUN) build $(KAS_CONFIG)
 	@$(MAKE) --no-print-directory deploy-images DEPLOY_TS=$(DEPLOY_TS)
 
 ## Clean sstate for the image recipe then rebuild (use after adding packages)
-rebuild-image: ensure-image kas-container-script
+rebuild-image: ensure-image kas-container-script ## cleansstate image recipe, then rebuild
 	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -c cleansstate $(IMAGE_TARGET)"
 	$(KAS_RUN) build $(KAS_CONFIG)
 	@$(MAKE) --no-print-directory deploy-images DEPLOY_TS=$(DEPLOY_TS)
 
 ## Interactive shell inside the KAS build container
-shell: ensure-image kas-container-script
+shell: ensure-image kas-container-script ## Interactive kas shell in the build container
 	$(KAS_RUN) shell $(KAS_CONFIG)
 
 ## Build the cross-toolchain SDK installer and deploy it (no Docker image)
 ## Use 'make sdk-image' to also build the SDK Docker image.
-sdk: ensure-image kas-container-script
+sdk: ensure-image kas-container-script ## Build cross-toolchain SDK → deploy/sdk/
 	@mkdir -p $(BUILD_DIR) $(DL_DIR) $(SSTATE_DIR)
 	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -c populate_sdk $(IMAGE_TARGET)"
 	@$(MAKE) --no-print-directory deploy-sdk DEPLOY_TS=$(DEPLOY_TS)
 
 ## Build the extensible SDK installer and deploy it (no Docker image)
 ## Use 'make esdk-image' to also build the eSDK Docker image.
-esdk: ensure-image kas-container-script
+esdk: ensure-image kas-container-script ## Build extensible SDK     → deploy/esdk/
 	@mkdir -p $(BUILD_DIR) $(DL_DIR) $(SSTATE_DIR)
 	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -c populate_sdk_ext $(IMAGE_TARGET)"
 	@$(MAKE) --no-print-directory deploy-esdk DEPLOY_TS=$(DEPLOY_TS)
 
 ## Build a .swu OTA update package from the latest rootfs.ext4 image
 ## Usage: make swu   or   make swu SWU_VERSION=1.2.3
-swu: build
+swu: build ## Build .swu OTA package  [SWU_VERSION=YYYYMMDDHHMM]
 	# The bundled SWUpdate flow writes an inactive rootfs slot and is only
 	# defined for boards that select sdimage-rpi5.wks.
 	@case "$(BOARD)" in \
@@ -452,7 +454,7 @@ swu: build
 
 
 ## Flash to SD card.  Usage: make flash rpi5 DEVICE=/dev/sdX
-flash:
+flash: ## Flash SD card  (requires DEVICE=/dev/sdX)
 ifndef DEVICE
 	$(error DEVICE is not set — example: make flash DEVICE=/dev/sdb)
 endif
@@ -470,7 +472,7 @@ endif
 # -----------------------------------------------------------------------------
 
 ## Copy .wic SD card images → deploy/images/BOARD_TS/
-deploy-images:
+deploy-images: ## Copy .wic artifacts → deploy/images/BOARD_TS/
 	@src="$(BUILD_DIR)/tmp/deploy/images/$(MACHINE)"; \
 	 out="$(DEPLOY_DIR)/images/$(BOARD)_$(DEPLOY_TS)"; \
 	 test -d "$$src" || { echo "ERROR: No image artifacts at $$src"; exit 1; }; \
@@ -483,7 +485,7 @@ deploy-images:
 	 $(MAKE) --no-print-directory checksums DEPLOY_DIR=$$out
 
 ## Copy cross-toolchain SDK installer → deploy/sdk/BOARD_TS/
-deploy-sdk:
+deploy-sdk: ## Copy SDK installer   → deploy/sdk/BOARD_TS/
 	@src="$(BUILD_DIR)/tmp/deploy/sdk"; \
 	 out="$(DEPLOY_DIR)/sdk/$(BOARD)_$(DEPLOY_TS)"; \
 	 test -d "$$src" || { echo "ERROR: No SDK artifacts at $$src"; exit 1; }; \
@@ -495,7 +497,7 @@ deploy-sdk:
 	 echo "  Done: $$out"
 
 ## Copy extensible SDK installer → deploy/esdk/BOARD_TS/
-deploy-esdk:
+deploy-esdk: ## Copy eSDK installer  → deploy/esdk/BOARD_TS/
 	@src="$(BUILD_DIR)/tmp/deploy/sdk"; \
 	 out="$(DEPLOY_DIR)/esdk/$(BOARD)_$(DEPLOY_TS)"; \
 	 test -d "$$src" || { echo "ERROR: No eSDK artifacts at $$src"; exit 1; }; \
@@ -507,7 +509,7 @@ deploy-esdk:
 	 echo "  Done: $$out"
 
 ## Copy .swu OTA package → deploy/swu/BOARD_TS/
-deploy-swu:
+deploy-swu: ## Copy .swu package    → deploy/swu/BOARD_TS/
 	@out="$(DEPLOY_DIR)/swu/$(BOARD)_$(DEPLOY_TS)"; \
 	 echo "Deploying SWU → $$out ..."; \
 	 mkdir -p "$$out"; \
@@ -520,7 +522,7 @@ deploy-swu:
 ## runs openssl dgst -verify with the public key the target bakes in. Fails if
 ## the bundle is unsigned or its signature does not validate.
 ## Usage: make verify-swu SWU_FILE=build/rpi5-<ts>.swu
-verify-swu:
+verify-swu: ## Verify a .swu signature against the committed public key (SWU_FILE=)
 	@[ -n "$(SWU_FILE)" ] || { echo "error: SWU_FILE is required"; exit 1; }
 	@test -f "$(SWU_FILE)" || { echo "error: $(SWU_FILE) not found"; exit 1; }
 	@pub="meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/swupdate-public.pem"; \
@@ -545,7 +547,7 @@ verify-swu:
 ## share one mechanism (SHA-256 + published manifest) that preflight, QA, and
 ## acceptance all enforce.
 ## Usage: make checksums DEPLOY_DIR=deploy/images/rpi5_<TS>
-checksums:
+checksums: ## Write SHA-256 manifest for a deploy dir (DEPLOY_DIR=)
 	@[ -n "$(DEPLOY_DIR)" ] || { echo "ERROR: DEPLOY_DIR is required"; exit 1; }
 	@test -d "$(DEPLOY_DIR)" || { echo "ERROR: $(DEPLOY_DIR) does not exist"; exit 1; }
 	@echo "Writing SHA-256 manifest for $(DEPLOY_DIR)"
@@ -559,7 +561,7 @@ checksums:
 ## check preflight/QA/acceptance invoke to prove the image bytes are the
 ## exact ones produced by the build.
 ## Usage: make verify DEPLOY_DIR=deploy/images/BOARD_TS
-verify:
+verify: ## Verify a deploy dir against its SHA-256 manifest (DEPLOY_DIR=)
 	@[ -n "$(DEPLOY_DIR)" ] || { echo "error: DEPLOY_DIR is required"; exit 1; }
 	@test -f "$(DEPLOY_DIR)/SHA256SUMS" || { echo "FAIL: no SHA256SUMS manifest in $(DEPLOY_DIR)"; exit 1; }
 	@echo "Verifying image integrity in $(DEPLOY_DIR) ..."
@@ -594,18 +596,18 @@ release-evidence:
 # -----------------------------------------------------------------------------
 
 ## Remove build/  (alias for clean-build)
-clean: clean-build
+clean: clean-build ## Remove build/
 
 ## Remove the build output directory
 clean-build:
 	rm -rf $(BUILD_DIR)
 
 ## Remove all three Docker images (kas, sdk, esdk)
-clean-docker:
+clean-docker: ## Remove kas/sdk/esdk Docker images
 	docker rmi -f $(KAS_IMAGE) $(SDK_IMAGE) $(ESDK_IMAGE) 2>/dev/null || true
 
 ## Remove build/ and cache/downloads/ and cache/sstate-cache/
-clean-all: clean-build
+clean-all: clean-build ## Remove build/ and cache/downloads/ and cache/sstate-cache/
 	rm -rf $(DL_DIR) $(SSTATE_DIR)
 
 # -----------------------------------------------------------------------------
@@ -613,7 +615,7 @@ clean-all: clean-build
 # -----------------------------------------------------------------------------
 
 ## Install bash tab-completion (appends a source line to ~/.bashrc)
-completion:
+completion: ## Install bash tab-completion into ~/.bashrc
 	@RCFILE="$$HOME/.bashrc"; \
 	 LINE="source \"$(CURDIR)/rpi-make-completion.bash\""; \
 	 if grep -qF "$$LINE" "$$RCFILE" 2>/dev/null; then \
@@ -634,7 +636,7 @@ completion:
 # them to /usr/lib/swupdate/ via SRC_URI.  Per CLAUDE.md C1, drift
 # between them silently regresses the rollback chain — only this
 # target catches it.
-lint-swupdate-sync:
+lint-swupdate-sync: ## Assert .swu-side and recipe-side pre/post-install.sh match
 	@set -e; \
 	for script in pre-install.sh post-install.sh; do \
 	    a="meta/meta-acadia/swupdate/$$script"; \
@@ -656,13 +658,13 @@ lint-swupdate-sync:
 	    echo "  OK: $$script in sync"; \
 	done
 
-lint: lint-swupdate-sync lint-makefile lint-yaml lint-reproducibility
+lint: lint-swupdate-sync lint-makefile lint-yaml lint-reproducibility ## Run all lint checks (Makefile syntax, YAML, swupdate sync)
 
 ## Reject AUTOREV in project recipes. Every active git recipe must use a
 ## reviewed 40-character SHA so builds are reproducible and metadata parsing
 ## does not perform a network lookup. The intentionally disabled
 ## acadia-client recipe uses a fixed zero SHA and is not matched here.
-lint-reproducibility:
+lint-reproducibility: ## Reject AUTOREV source revisions
 	@matches="$$(grep -R -nE '^[[:space:]]*SRCREV[^#]*=[^#]*\$\{AUTOREV\}' \
 	    meta/meta-acadia/recipes-* --include='*.bb' --include='*.bbappend' 2>/dev/null || true)"; \
 	if [ -n "$$matches" ]; then \
@@ -680,7 +682,7 @@ lint-hardening:
 ## Validate Makefile syntax — parses the full Makefile (all includes,
 ## conditionals, and variable expansions) without executing any recipe.
 ## feature.txt §12: "Makefile syntax validation through make lint".
-lint-makefile:
+lint-makefile: ## Validate Makefile syntax
 	@$(MAKE) -pn >/dev/null 2>&1 \
 	    && echo "  OK: Makefile syntax valid" \
 	    || { echo "ERROR: Makefile failed to parse"; exit 1; }
@@ -689,14 +691,14 @@ lint-makefile:
 ## files (feature.txt §12: "YAML validation for common, target, and
 ## repository configuration files"). Runs inside the KAS container so
 ## PyYAML does not need to be installed on the host.
-lint-yaml: ensure-image
+lint-yaml: ensure-image ## Validate kas YAML configuration syntax
 	@echo "Validating YAML syntax (kas/common.yaml, kas/boards/*.yaml, kas/repos/*.yaml) ..."
 	@docker run --rm -v $(CURDIR):/w -w /w $(KAS_IMAGE) \
 	    python3 scripts/validate-yaml.py kas/common.yaml kas/boards/*.yaml kas/repos/*.yaml
 
 ## Check host prerequisites — Docker and curl (feature.txt §12:
 ## "Prerequisite checks for Docker and curl through make test").
-test:
+test: ## Check host prerequisites (docker, curl)
 	@echo "Checking prerequisites ..."
 	@command -v docker >/dev/null 2>&1 \
 	    && echo "  OK: docker found ($$(docker --version))" \
@@ -720,7 +722,7 @@ test-target: ## Run target-required network/modem bats tests against a booted im
 ## non-empty 'machine:' field (feature.txt §12: "Automatic validation of
 ## every target configuration and its MACHINE field" / "Target
 ## configuration validation through make check-board").
-check-board:
+check-board: ## Validate every board's kas config has a MACHINE field
 	@echo "Validating board configurations ..."
 	@fail=0; \
 	for f in kas/boards/*.yaml; do \
@@ -741,7 +743,7 @@ check-board:
 ## feature.txt §12: "BitBake metadata validation through make validate" /
 ## "Validation of middleware, cloud, debug, SDK, development-package,
 ## and ptest features".
-validate: check-board ensure-image kas-container-script
+validate: check-board ensure-image kas-container-script ## Parse BitBake metadata + check middleware/cloud/debug/ptest wiring
 	@echo "Parsing BitBake metadata for BOARD=$(BOARD) (MACHINE=$(MACHINE)) ..."
 	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -p"
 	@echo ""
@@ -757,55 +759,13 @@ validate: check-board ensure-image kas-container-script
 	     echo "ERROR: feature validation failed"; exit 1; \
 	 fi
 
-help:
-	@printf "\nUsage: make <target> <board>\n"
-	@printf "\n  Examples:\n"
-	@printf "    make image  rpi5\n"
-	@printf "    make sdk    rpi4-64\n"
-	@printf "    make esdk   rpi3-64\n"
-	@printf "    make flash  rpi5 DEVICE=/dev/sdb\n"
-	@printf "\nYocto build:\n"
-	@printf "  %-24s %s\n" "image"              "Build Yocto SD card image for BOARD  (alias for build)"
-	@printf "  %-24s %s\n" "build"              "Build Yocto SD card image for BOARD"
-	@printf "  %-24s %s\n" "rebuild-image"      "cleansstate image recipe, then rebuild"
-	@printf "  %-24s %s\n" "sdk"                "Build cross-toolchain SDK → deploy/sdk/"
-	@printf "  %-24s %s\n" "esdk"               "Build extensible SDK     → deploy/esdk/"
-	@printf "  %-24s %s\n" "shell"              "Interactive kas shell in the build container"
-	@printf "  %-24s %s\n" "swu"                "Build .swu OTA package  [SWU_VERSION=YYYYMMDDHHMM]"
-	@printf "  %-24s %s\n" "flash"              "Flash SD card  (requires DEVICE=/dev/sdX)"
-	@printf "\nDocker images:\n"
-	@printf "  %-24s %s\n" "kas-image"          "Build/rebuild KAS build container  (docker/yocto/)"
-	@printf "  %-24s %s\n" "ensure-image"       "Build KAS image only when absent"
-	@printf "  %-24s %s\n" "sdk-image"          "Full chain: SDK build → stage → docker build → deploy"
-	@printf "  %-24s %s\n" "ensure-sdk-image"   "Run sdk-image chain only when image is absent"
-	@printf "  %-24s %s\n" "esdk-image"         "Full chain: eSDK build → stage → docker build → deploy"
-	@printf "  %-24s %s\n" "ensure-esdk-image"  "Run esdk-image chain only when image is absent"
-	@printf "\nDeployment (called automatically; can also be run manually):\n"
-	@printf "  %-24s %s\n" "deploy-images"      "Copy .wic artifacts → deploy/images/BOARD_TS/"
-	@printf "  %-24s %s\n" "deploy-sdk"         "Copy SDK installer   → deploy/sdk/BOARD_TS/"
-	@printf "  %-24s %s\n" "deploy-esdk"        "Copy eSDK installer  → deploy/esdk/BOARD_TS/"
-	@printf "  %-24s %s\n" "deploy-swu"         "Copy .swu package    → deploy/swu/BOARD_TS/"
-	@printf "  %-24s %s\n" "checksums"          "Write SHA-256 manifest for a deploy dir (DEPLOY_DIR=)"
-	@printf "  %-24s %s\n" "verify"             "Verify a deploy dir against its SHA-256 manifest (DEPLOY_DIR=)"
-	@printf "  %-24s %s\n" "verify-swu"         "Verify a .swu signature against the committed public key (SWU_FILE=)"
-	@printf "\nClean:\n"
-	@printf "  %-24s %s\n" "clean"              "Remove build/"
-	@printf "  %-24s %s\n" "clean-docker"       "Remove kas/sdk/esdk Docker images"
-	@printf "  %-24s %s\n" "clean-all"          "Remove build/ and cache/downloads/ and cache/sstate-cache/"
-	@printf "\nUtilities:\n"
-	@printf "  %-24s %s\n" "completion"         "Install bash tab-completion into ~/.bashrc"
-	@printf "\nLinting:\n"
-	@printf "  %-24s %s\n" "lint"               "Run all lint checks (Makefile syntax, YAML, swupdate sync)"
-	@printf "  %-24s %s\n" "lint-makefile"      "Validate Makefile syntax"
-	@printf "  %-24s %s\n" "lint-yaml"          "Validate kas YAML configuration syntax"
-	@printf "  %-24s %s\n" "lint-swupdate-sync" "Assert .swu-side and recipe-side pre/post-install.sh match"
-	@printf "  %-24s %s\n" "lint-reproducibility" "Reject AUTOREV source revisions"
-	@printf "\nValidation:\n"
-	@printf "  %-24s %s\n" "test"               "Check host prerequisites (docker, curl)"
-	@printf "  %-24s %s\n" "check-board"        "Validate every board's kas config has a MACHINE field"
-	@printf "  %-24s %s\n" "validate"           "Parse BitBake metadata + check middleware/cloud/debug/ptest wiring"
-	@printf "\nBoards:\n"
-	@printf "  rpi5  rpi4-64  rpi4  rpi3-64  rpi3  rpi2\n"
-	@printf "  rpi0-2w-64  rpi0-2w  rpi0-wifi  rpi0  rpi1\n"
-	@printf "  rpi-armv7  rpi-armv8  cm1  cm3  cm5\n"
-	@printf "\n"
+# ── Help ──────────────────────────────────────────────────────────────────────
+# Targets are self-documenting: text after `## ` on a target line is picked up
+# by `make help` automatically, so the listing can never drift from the rules.
+.PHONY: help
+help: ## Show this help
+	@printf '\n  \033[1m%s\033[0m\n' 'Acadia-OS'
+	@printf '  Usage: make <target> [VAR=value ...]\n'
+	@printf '\n'
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_.\/-]+:.*?## / { printf "    \033[36m%-24s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@printf '\n'
