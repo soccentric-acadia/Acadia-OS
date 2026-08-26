@@ -1,0 +1,18 @@
+header:
+  version: 14
+
+repos:
+  # Newer-Rust mixin for Yocto Scarthgap (issue: webconfigd needs rustc >= 1.86,
+  # oe-core Scarthgap ships 1.75).  Provides collection `scarthgap-rust-mixin`
+  # (RUSTVERSION 1.96) which overrides oe-core's cargo/rust recipes.  Required
+  # by meta-acadia's webconfigd recipe to build its edition-2024 dependency tree.
+  meta-lts-mixins:
+    url: https://git.yoctoproject.org/meta-lts-mixins
+    branch: scarthgap/rust
+    # Pin to a specific commit (issue #22/#23 pattern).  Update via
+    # scripts/pin-layers.sh after a 'make build rpi5' end-to-end run validates
+    # the new SHA; the layer sits at the repo root on this branch.
+    commit: 9987a76095ee751864e55e418539f42b9c3b8a6b
+    path: layers/meta-lts-mixins
+    layers:
+      .:
