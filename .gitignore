@@ -2,6 +2,11 @@
 build/
 cache/
 
+# ─── Local layer clones (never commit; kas fetches layers) ────────────────────
+# meta-webconfig is provided via meta-acadia's webconfigd.bb, which fetches
+# Acadia-Configuration directly. A vendored copy here is a duplication hazard.
+meta/meta-webconfig/
+
 # ─── KAS artefacts ────────────────────────────────────────────────────────────
 .kas-cache/
 kas-container
