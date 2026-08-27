@@ -658,12 +658,15 @@ lint-swupdate-sync: ## Assert .swu-side and recipe-side pre/post-install.sh matc
 	    echo "  OK: $$script in sync"; \
 	done
 
-lint: lint-swupdate-sync lint-makefile lint-yaml lint-reproducibility ## Run all lint checks (Makefile syntax, YAML, swupdate sync)
+lint: lint-swupdate-sync lint-makefile lint-yaml lint-reproducibility lint-image-packages ## Run all lint checks (Makefile syntax, YAML, swupdate sync, image packages)
 
 ## Reject AUTOREV in project recipes. Every active git recipe must use a
 ## reviewed 40-character SHA so builds are reproducible and metadata parsing
 ## does not perform a network lookup. The intentionally disabled
 ## acadia-client recipe uses a fixed zero SHA and is not matched here.
+lint-image-packages: ## Static gate: every IMAGE_INSTALL token in acadia-image*.bb must have a provider recipe (OS-003)
+	@bash scripts/check-image-packages.sh
+
 lint-reproducibility: ## Reject AUTOREV source revisions
 	@matches="$$(grep -R -nE '^[[:space:]]*SRCREV[^#]*=[^#]*\$\{AUTOREV\}' \
 	    meta/meta-acadia/recipes-* --include='*.bb' --include='*.bbappend' 2>/dev/null || true)"; \
