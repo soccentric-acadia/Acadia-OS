@@ -35,6 +35,10 @@
 
 ### Added — project documentation
 
+- **User accounts**: `acaida` login account (password `acaida`, SHA-512-crypt
+  via `extrausers`) with home `/home/acaida` created on the persistent p4
+  partition by `rpi5-home-init` on first boot (`acadia-image.bb`, inherited by
+  all vertical images).
 - **`CLAUDE.md`** and **`REPO_MAP.md`** — project documentation matching the
   fleet-wide convention.
 
