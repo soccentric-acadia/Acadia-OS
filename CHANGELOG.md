@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-18 — Agent documentation and task workflow standardization
+
+- Replaced the detailed root `CLAUDE.md` with a canonical pointer and added
+  `AGENTS.md`.
+- Added a concise canonical document with Yocto image-build and layer-wiring
+  validation instructions.
+- Added ignored local `Plan.md` and `Task.md` workflow artifacts.
+- Verified the required document shape and the declared `make build` and
+  `make test-wiring` targets.
+
 ## [Unreleased]
 
 ### Added — hardware enablement (task.md)
