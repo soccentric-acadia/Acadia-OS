@@ -55,3 +55,7 @@ deploy/
 # upstream (soccentric-acadia/meta-acadia) and checked out here as a nested
 # clone — never tracked in this repo.
 meta/*
+
+# Per-task working artifacts.
+Plan.md
+Task.md
