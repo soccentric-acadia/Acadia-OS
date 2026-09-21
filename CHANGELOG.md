@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-21 — Root-agent feature workflow guard (task 006)
+
+- Added a canonical instruction requiring leaf-started agents to refuse feature
+  changes and direct the user to the Acadia parent root.
+
 ## 2026-09-21 — Persistent 1 GB `/pst` partition (task 003)
 
 ### Added
