@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-09-21 — PREEMPT_RT kernel for aarch64 (task 002)
+
+### Added
+
+- The aarch64 Acadia kernel is now a PREEMPT_RT real-time kernel: upstream
+  `patch-6.6.78-rt51` (GPG-verified against the kernel.org RT maintainer key)
+  applied on top of the pinned `rpi-6.6.y` SRCREV `bba53a1` (6.6.78) via the
+  meta-acadia `linux-raspberrypi_6.6.bbappend`, with a new
+  `files/fragments/preempt-rt.cfg` selecting `CONFIG_PREEMPT_RT=y`.
+- `acadia-image` ships `rt-tests` 2.6 (cyclictest/hackbench/hwlatdetect) for
+  latency measurement in the field and on the test bench.
+- Built kernel banner: `Linux version 6.6.78-rt51-v8-16k … #1 SMP PREEMPT_RT`.
+- 32-bit armv7 machines (`linux-raspberrypi-v7`) are intentionally out of
+  scope and keep the stock (non-RT) kernel (task 002 decision D1).
+
+### Changed
+
+- meta-acadia commit `4af0d5a` (vendored patch + fragment + bbappend +
+  image); full rpi5 image build and `make test-wiring` green.
+- On-target validation (boot identity, cyclictest, peripherals, SWUpdate A/B)
+  pending hardware access — see
+  `tasks/002-add-preempt-rt-kernel-patch/validation.md` for the procedure.
+
+All changes are in the meta-acadia layer (nested clone); no outer-repo files
+modified.
+
 ## 2026-09-18 — Agent documentation and task workflow standardization
 
 - Replaced the detailed root `CLAUDE.md` with a canonical pointer and added
