@@ -1,5 +1,48 @@
 # Changelog
 
+## 2026-09-21 — Persistent 1 GB `/pst` partition (task 003)
+
+### Added
+
+- The A/B OTA SD image (`sdimage-rpi5.wks`, boards `rpi5` and `cm5`) now has
+  a dedicated persistent store partition: **p4 `/pst`, 1 GB fixed, ext4,
+  label `pst`** — never written by SWUpdate, so alarm state, collected logs,
+  backups, and istate-seeded configuration survive every software update.
+- New `acadia-pst-init` recipe shipping the rootfs-packaged `pst.mount`
+  systemd unit (`LABEL=pst`, silently skipped on devices with the old
+  4-partition layout), the `acadia-pst-init.service` ownership bootstrap
+  (`instr-istate:instr`, setgid 2770, per-spoke store directories), and an
+  `instr-istate.service` ordering drop-in. Installed on `raspberrypi5` and
+  `raspberrypi-cm5-io-board`.
+- Partition table switched from msdos to **GPT** (`--ptable gpt`): five data
+  partitions exceed the msdos four-primary limit and its extended-container
+  fallback would trap the last partition, breaking `/home` growth to fill
+  the card. GPT is also required for RPi5 secure boot and CM5 NVMe boot.
+
+### Fixed
+
+- The `/home` partition (now p5) is mkfs'd: `--source empty` in this poky
+  creates unformatted (all-zero) partitions, so `/home` could never mount
+  from a fresh flash. Both `/home` and `/pst` now omit `--source` and get a
+  formatted empty ext4 volume; `rootfs-b` (p3) keeps `--source empty`
+  deliberately (SWUpdate raw-writes the complete rootfs onto it).
+- `rpi5-home-init` growth logic is unchanged (the partition number is
+  derived at runtime; `/home` remains the last partition).
+
+### Validation
+
+All changes are in the meta-acadia layer (nested clone, commit `5bbaeb2`); the
+outer repo changes are the task records and this changelog entry only.
+Full `make build rpi5` green (10,145 tasks); `make test-wiring` green; bats
+suites green (pst-init 17/17, swupdate-config 72/72, home-init 16/16);
+built-artifact inspection confirms the GPT layout, `pst`/`home` volume
+names, unchanged fstab, and the units present in both the factory `.wic` and
+the OTA-packaged `.rootfs.ext4`. On-target OTA round-trip pending hardware
+access — see `tasks/003-add-pst-partition/validation.md`.
+
+Pre-existing `lint-reproducibility` AUTOREV failures (acadia-client,
+webconfigd) are unrelated to this task.
+
 ## 2026-09-21 — PREEMPT_RT kernel for aarch64 (task 002)
 
 ### Added
