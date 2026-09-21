@@ -335,7 +335,7 @@ shell: ensure-image kas-container-script ## Interactive kas shell in the build c
 	$(KAS_RUN) shell $(KAS_CONFIG)
 
 test-wiring: ensure-image kas-container-script ## Bitbake-build just WebConfig + Instrumentation (skips the full image)
-	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -c clean webconfigd instrumentation acadia-hal acadia-client"
+	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -c cleansstate webconfigd instrumentation acadia-hal acadia-client"
 	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake webconfigd instrumentation acadia-hal acadia-client"
 
 
