@@ -12,6 +12,15 @@ distro: poky
 target: acadia-image
 
 local_conf_header:
+  # Private GitHub repos must be fetched over SSH only (protocol=ssh in the
+  # recipes).  BitBake overrides HOME with a temp dir for fetch tasks, so
+  # ssh cannot find ~/.ssh and the fetch falls back to OE-core's default
+  # https mirrors, which can never serve a private repo.  kas-container
+  # mounts KAS_SSH_DIR at /var/kas/userdata/.ssh (read-only) — point ssh at
+  # that absolute path so the key is found regardless of HOME.
+  ssh-fetch: |
+    export GIT_SSH_COMMAND = "ssh -o IdentitiesOnly=yes -i /var/kas/userdata/.ssh/id_rsa -o UserKnownHostsFile=/var/kas/userdata/.ssh/known_hosts -o StrictHostKeyChecking=accept-new"
+
   base: |
     # Init manager
     INIT_MANAGER = "systemd"
