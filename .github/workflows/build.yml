@@ -50,8 +50,13 @@ jobs:
             echo "bats tests require checkout layout; static checks above cover the intent"
 
   build:
+    # OS-033: a full Yocto build needs ~14 GB disk, an SSH deploy key for the
+    # private upstreams, and an sstate mirror — none of which GitHub-hosted
+    # runners provide. The build therefore runs ONLY on the self-hosted Yocto
+    # builder; hosted runners keep the static-validation job above.
     name: Yocto build — ${{ matrix.board }}
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, yocto-builder]
+    if: contains(runner.labels, 'yocto-builder')
     strategy:
       fail-fast: false
       matrix:
