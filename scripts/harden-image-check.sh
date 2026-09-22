@@ -35,6 +35,20 @@ if [ -f "$IMG" ]; then
   else
     echo "  OK: no unconditional debug-tweaks / empty-root-password"
   fi
+
+  # 2b. OS-002: no hard-coded user password hashes in the image recipe.
+  # EXTRA_USERS_PARAMS must never carry a literal `usermod -p '<hash>'` —
+  # every shipped image would share the same fleet-wide credential.
+  if grep -qE 'usermod -p ' "$IMG"; then
+    echo "  FAIL: image recipe hard-codes a user password via 'usermod -p' (fleet-wide credential)"
+    fail=1
+  else
+    echo "  OK: no hard-coded user password in image recipe"
+  fi
+  if grep -E 'useradd|usermod' "$IMG" | grep -qE '\\$[16]\$[./A-Za-z0-9]'; then
+    echo "  FAIL: image recipe embeds a salted password hash (hard-coded credential)"
+    fail=1
+  fi
 fi
 
 # 3. sshd must not permit password or root login.
