@@ -29,6 +29,12 @@ local_conf_header:
     IMAGE_FSTYPES = "wic.bz2 wic.bmap ext4"
 
     # Raspberry Pi settings
+    # F04 / OS-005 console policy (T-P14): the UART stays enabled as the
+    # support/bring-up console. There is NO autologin and no default
+    # credential: root is locked (OS-001), the operator/rpi accounts are
+    # locked until first use (T-P11), and the console only ever reaches a
+    # login prompt. The SWUpdate web UI (the other console-printed secret,
+    # its per-boot password) was removed entirely (F12).
     ENABLE_UART = "1"
     GPU_MEM     = "128"
     # NOTE: do not add `synaptics-killswitch` here.  meta-raspberrypi
@@ -50,6 +56,10 @@ local_conf_header:
     # Override per-deployment by setting RPI_EXTRA_CONFIG in a board's
     # local_conf_header (or on the make command line).
     RPI_EXTRA_CONFIG ?= " \
+        # T-P15: Pico W co-processor link on RP1 UART2 (GPIO0/1) — the HAT
+        # ID-EEPROM function of those pins is unused on this board (module
+        # EEPROM is on I2C1). Expected node /dev/ttyAMA2 (HIL-verify).
+        dtoverlay=uart2 \
         dtoverlay=w1-gpio \
         dtoverlay=pwm \
         dtoverlay=mcp2515-can0,oscillator=16000000,interrupt=25 \
