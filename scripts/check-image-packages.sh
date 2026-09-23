@@ -166,6 +166,7 @@ REQUIRED_IMAGE_PACKAGES=(
   mosquitto-clients   # SB-3: alert delivery via mosquitto_pub (P-I07)
   curl                # SB-3: OTA/backup/HQ downloads (webconfigd shells out)
   ca-certificates     # TLS verification for the curl/HQ paths
+  swupdate-client     # T-P26: WebConfig/HQ installs hand the bundle to the daemon IPC (P-K06)
 )
 
 for pkg in "${REQUIRED_IMAGE_PACKAGES[@]}"; do

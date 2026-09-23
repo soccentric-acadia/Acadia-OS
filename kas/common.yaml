@@ -55,10 +55,13 @@ local_conf_header:
     #   vc4-kms-v3d    → full KMS (pinned per-board; see kas/boards/*.yaml)
     # Override per-deployment by setting RPI_EXTRA_CONFIG in a board's
     # local_conf_header (or on the make command line).
+    #
+    # T-P15: Pico W co-processor link on RP1 UART2 (GPIO0/1) — the HAT
+    # ID-EEPROM function of those pins is unused on this board (module
+    # EEPROM is on I2C1). Expected node /dev/ttyAMA2 (HIL-verify).
+    # NOTE: comment lines must live OUTSIDE the quoted value — BitBake
+    # cannot parse '#' inside a continued config string.
     RPI_EXTRA_CONFIG ?= " \
-        # T-P15: Pico W co-processor link on RP1 UART2 (GPIO0/1) — the HAT
-        # ID-EEPROM function of those pins is unused on this board (module
-        # EEPROM is on I2C1). Expected node /dev/ttyAMA2 (HIL-verify).
         dtoverlay=uart2 \
         dtoverlay=w1-gpio \
         dtoverlay=pwm \
@@ -87,6 +90,15 @@ local_conf_header:
 
     # SWUpdate: enable built-in Mongoose web server and progress IPC
     PACKAGECONFIG:append:pn-swupdate = " webserver"
+
+    # systemd's polkit PACKAGECONFIG (auto-enabled by the 'polkit'
+    # DISTRO_FEATURE above) chowns ${datadir}/polkit-1/rules.d to
+    # 'polkitd' during do_install, but that user only exists once
+    # polkit's own useradd runs — no ordering guarantee, so systemd
+    # fails with "chown: invalid user: 'polkitd:root'".  Acadia needs
+    # the polkit daemon itself (SB-2/T-P02, webconfigd rules), not
+    # systemd's polkit agent integration — disable it.
+    PACKAGECONFIG:remove:pn-systemd = "polkit"
 
     # Required by Poky sanity checks (must match LOCALCONF_VERSION in poky)
     CONF_VERSION = "2"
@@ -117,7 +129,9 @@ local_conf_header:
     # Ptest package and runner support (feature.txt §6 / §12). Requires
     # "ptest" in DISTRO_FEATURES so recipes build their -ptest packages;
     # IMAGE_FEATURES += "ptest-pkgs" (acadia-image.bb) installs them.
-    DISTRO_FEATURES:append = " ptest"
+    # "polkit" is required by oe-core's polkit recipe (REQUIRED_DISTRO_FEATURES);
+    # acadia-image/webconfigd depend on it (SB-2 / T-P02).
+    DISTRO_FEATURES:append = " ptest polkit"
 
     # SDK: include dev-pkgs (headers), dbg-pkgs (debug symbols), and
     # target-side debugging/profiling tools in the toolchain payload
