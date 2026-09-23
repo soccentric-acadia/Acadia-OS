@@ -148,4 +148,47 @@ if [ "$fail" -ne 0 ]; then
   echo "ERROR: unresolvable image packages (missing recipes, or upstream layers not cloned under layers/)" >&2
   exit 1
 fi
-echo "image package resolvability: OK"
+
+# ── Required-package gate (SB-3 / T-P03) ──────────────────────────────────
+# Features the image ships MUST have their runtime binaries present. Each
+# entry below is required to appear in at least one acadia image recipe AND
+# to resolve to a provider recipe. Removing one from the image without
+# updating this list fails the gate — the removal must be a conscious,
+# reviewable decision, never a silent dependency drop.
+#
+# Deferred by T-P00e (NOT required, features hidden in v1): hostapd, dnsmasq
+# (AP mode), linuxptp (PTP), wireguard-tools (WireGuard) — packaging one
+# means adding it here in the same change.
+REQUIRED_IMAGE_PACKAGES=(
+  polkit              # SB-2: D-Bus service control for webconfigd (T-P02)
+  nftables            # SB-3: firewall applier drives nft (P-F01)
+  chrony              # SB-3: GNSS time chain gpsd+chrony (P-D05)
+  mosquitto-clients   # SB-3: alert delivery via mosquitto_pub (P-I07)
+  curl                # SB-3: OTA/backup/HQ downloads (webconfigd shells out)
+  ca-certificates     # TLS verification for the curl/HQ paths
+)
+
+for pkg in "${REQUIRED_IMAGE_PACKAGES[@]}"; do
+  if [ -z "${PROVIDES[$pkg]:-}" ]; then
+    echo "FAIL: required package '$pkg' has no provider recipe" >&2
+    fail=1
+    continue
+  fi
+  present=0
+  for img in "${images[@]}"; do
+    if grep -qE "(^|[[:space:]\"])${pkg}([[:space:]\"]|$)" <(grep -E '^[[:space:]]*IMAGE_INSTALL' "$img" | sed 's/#.*$//'); then
+      present=1
+      break
+    fi
+  done
+  if [ "$present" -ne 1 ]; then
+    echo "FAIL: required package '$pkg' resolves but is not installed by any acadia image" >&2
+    fail=1
+  fi
+done
+
+if [ "$fail" -ne 0 ]; then
+  echo "image package resolvability: FAIL" >&2
+  exit 1
+fi
+echo "image package resolvability: OK (required set present)"
