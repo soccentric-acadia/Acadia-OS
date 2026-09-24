@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-24 — Integration-production pass (OS-072, T-P29/30, T-P35)
+
+- OS-072: kas parses again, the polkit distro feature is enabled, and swupdate-client is added to the gate.
+- T-P29/T-P30: rsyslog is the system syslog, plus the kernel fan curve.
+- T-P35:
+  - meta-acadia is pinned to a commit (OS-031);
+  - the SPDX SBOM is deployed and recorded in RELEASE.json, with a `make cve-check` overlay and a weekly CI scan (OS-015);
+  - a signed-release CI job uses the vault key (OS-068);
+  - a HIL OTA job and `scripts/hil-ota.sh` cover update, confirm and forced rollback (OS-065).
+- Validation: `make build BOARD=rpi5` on the pinned layer; signing path tested with a throwaway key. The CVE scan, release job and HIL job need the self-hosted builder, secrets and a rig, and have not run yet.
+
 ## 2026-09-21 — Root-agent feature workflow guard (task 006)
 
 - Added a canonical instruction requiring leaf-started agents to refuse feature
