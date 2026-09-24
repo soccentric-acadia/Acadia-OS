@@ -61,7 +61,16 @@ local_conf_header:
     # EEPROM is on I2C1). Expected node /dev/ttyAMA2 (HIL-verify).
     # NOTE: comment lines must live OUTSIDE the quoted value — BitBake
     # cannot parse '#' inside a continued config string.
+    #
+    # T-P30 (M10, OS-052/053): the Pi 5 fan header is driven by the kernel
+    # pwm-fan cooling device; its thermal trips (millidegrees) and PWM speed
+    # (0-255) per step replace the retired userspace fan-control.sh — same
+    # curve: 50 °C→64, 60 °C→128, 70 °C→192, 80 °C→255, 5 °C hysteresis.
     RPI_EXTRA_CONFIG ?= " \
+        dtparam=fan_temp0=50000,fan_temp0_hyst=5000,fan_temp0_speed=64 \
+        dtparam=fan_temp1=60000,fan_temp1_hyst=5000,fan_temp1_speed=128 \
+        dtparam=fan_temp2=70000,fan_temp2_hyst=5000,fan_temp2_speed=192 \
+        dtparam=fan_temp3=80000,fan_temp3_hyst=5000,fan_temp3_speed=255 \
         dtoverlay=uart2 \
         dtoverlay=w1-gpio \
         dtoverlay=pwm \
@@ -90,6 +99,11 @@ local_conf_header:
 
     # SWUpdate: enable built-in Mongoose web server and progress IPC
     PACKAGECONFIG:append:pn-swupdate = " webserver"
+
+    # T-P29 (J03): rsyslog (forward-only config, meta-acadia bbappend) is the
+    # system syslog. packagegroup-core-full-cmdline otherwise pulls sysklogd,
+    # a second daemon writing /var/log files beside journald.
+    VIRTUAL-RUNTIME_syslog = "rsyslog"
 
     # systemd's polkit PACKAGECONFIG (auto-enabled by the 'polkit'
     # DISTRO_FEATURE above) chowns ${datadir}/polkit-1/rules.d to

@@ -167,6 +167,7 @@ REQUIRED_IMAGE_PACKAGES=(
   curl                # SB-3: OTA/backup/HQ downloads (webconfigd shells out)
   ca-certificates     # TLS verification for the curl/HQ paths
   swupdate-client     # T-P26: WebConfig/HQ installs hand the bundle to the daemon IPC (P-K06)
+  rsyslog             # T-P29: WebConfig remote syslog forwarding (P-J03)
 )
 
 for pkg in "${REQUIRED_IMAGE_PACKAGES[@]}"; do
