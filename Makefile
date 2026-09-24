@@ -353,6 +353,18 @@ esdk: ensure-image kas-container-script ## Build extensible SDK     → deploy/e
 	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -c populate_sdk_ext $(IMAGE_TARGET)"
 	@$(MAKE) --no-print-directory deploy-esdk DEPLOY_TS=$(DEPLOY_TS)
 
+## OS-015: build with the cve-check overlay and copy the CVE report next to
+## the image. Slow on a cold NVD cache — the scheduled CI job runs it.
+cve-check: ensure-image kas-container-script ## Build with cve-check; report -> deploy/images/BOARD_TS/
+	@mkdir -p $(BUILD_DIR) $(DL_DIR) $(SSTATE_DIR)
+	$(KAS_RUN) build $(KAS_CONFIG):kas/include/cve-check.yaml
+	@$(MAKE) --no-print-directory deploy-images DEPLOY_TS=$(DEPLOY_TS)
+	@src="$(BUILD_DIR)/tmp/deploy/images/$(MACHINE)"; out="$(DEPLOY_DIR)/images/$(BOARD)_$(DEPLOY_TS)"; \
+	 rep="$$(ls "$$src"/$(IMAGE_TARGET)-$(MACHINE).rootfs.json 2>/dev/null | head -1)"; \
+	 test -n "$$rep" || { echo "ERROR: no cve-check report in $$src"; exit 1; }; \
+	 cp -L "$$rep" "$$out/$(IMAGE_TARGET)-$(MACHINE).cve.json"; \
+	 echo "  CVE report: $$out/$(IMAGE_TARGET)-$(MACHINE).cve.json"
+
 ## Build a .swu OTA update package from the latest rootfs.ext4 image
 ## Usage: make swu   or   make swu SWU_VERSION=1.2.3
 swu: build ## Build .swu OTA package  [SWU_VERSION=YYYYMMDDHHMM]
@@ -486,6 +498,9 @@ deploy-images: ## Copy .wic artifacts → deploy/images/BOARD_TS/
 	 find "$$src" -maxdepth 1 \( -type f -o -type l \) \
 	     \( -name "*.wic.bz2" -o -name "*.wic.bmap" \) \
 	     -exec cp -L {} "$$out/" \;; \
+	 sbom="$$(ls "$$src"/$(IMAGE_TARGET)-$(MACHINE).rootfs.spdx.tar.zst 2>/dev/null | head -1)"; \
+	 if [ -n "$$sbom" ]; then cp -L "$$sbom" "$$out/"; echo "  SBOM: $$(basename "$$sbom")"; \
+	 else echo "  WARNING: no SPDX SBOM in $$src (OS-015)"; fi; \
 	 echo "  Done: $$out"; \
 	 $(MAKE) --no-print-directory checksums DEPLOY_DIR=$$out
 
@@ -527,19 +542,23 @@ deploy-swu: ## Copy .swu package    → deploy/swu/BOARD_TS/
 ## runs openssl dgst -verify with the public key the target bakes in. Fails if
 ## the bundle is unsigned or its signature does not validate.
 ## Usage: make verify-swu SWU_FILE=build/rpi5-<ts>.swu
+# The key the image trusts; overridable only to test the signing path with a
+# throwaway pair.
+SWU_PUBKEY ?= $(CURDIR)/meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/swupdate-public.pem
+
 verify-swu: ## Verify a .swu signature against the committed public key (SWU_FILE=)
 	@[ -n "$(SWU_FILE)" ] || { echo "error: SWU_FILE is required"; exit 1; }
 	@test -f "$(SWU_FILE)" || { echo "error: $(SWU_FILE) not found"; exit 1; }
-	@pub="meta/meta-acadia/recipes-swupdate/rpi5-swupdate-config/files/swupdate-public.pem"; \
+	@pub="$(SWU_PUBKEY)"; \
 	 work="$$(mktemp -d)"; \
 	 trap 'rm -rf "$$work"' EXIT; \
 	 echo "Extracting signature bundle from $(SWU_FILE) ..."; \
-	 cd "$$work" && cpio -id --quiet sw-description sw-description.sig < "$(SWU_FILE)" 2>/dev/null \
+	 cd "$$work" && cpio -id --quiet sw-description sw-description.sig < "$(abspath $(SWU_FILE))" 2>/dev/null \
 	   || { echo "error: could not extract sw-description/sig"; exit 1; }; \
 	 if [ ! -f sw-description.sig ]; then \
 	   echo "error: $(SWU_FILE) is UNSIGNED (no sw-description.sig)"; exit 1; \
 	 fi; \
-	 if ! openssl dgst -sha256 -verify "$(CURDIR)/$$pub" -signature sw-description.sig sw-description; then \
+	 if ! openssl dgst -sha256 -verify "$$pub" -signature sw-description.sig sw-description; then \
 	   echo "error: signature verification FAILED against public key"; exit 1; fi; \
 	 echo "OK: $(SWU_FILE) signature verified against swupdate-public.pem"
 
@@ -588,6 +607,10 @@ release-evidence:
 	 printf '  "source_commit": "%s",\n' "$$sha" >> "$$out"; \
 	 printf '  "timestamp": "%s",\n' "$$ts" >> "$$out"; \
 	 printf '  "checksums": "SHA256SUMS",\n' >> "$$out"; \
+	 sbom="$$(ls "$(DEPLOY_DIR)"/*.spdx.tar.zst 2>/dev/null | head -1)"; \
+	 if [ -n "$$sbom" ]; then printf '  "sbom_spdx": "%s",\n' "$$(basename "$$sbom")" >> "$$out"; fi; \
+	 cve="$$(ls "$(DEPLOY_DIR)"/*cve*.json 2>/dev/null | head -1)"; \
+	 if [ -n "$$cve" ]; then printf '  "cve_report": "%s",\n' "$$(basename "$$cve")" >> "$$out"; fi; \
 	 if [ -n "$(SWU_FILE)" ] && [ -f "$(SWU_FILE)" ]; then \
 	   printf '  "swu": "%s",\n' "$(SWU_FILE)" >> "$$out"; \
 	   printf '  "signature_verified": "see make verify-swu",\n' >> "$$out"; \

@@ -8,6 +8,9 @@ repos:
   meta-acadia:
     url: git@github.com:soccentric-acadia/meta-acadia.git
     branch: develop
+    # OS-031: pinned — a build takes exactly this layer revision, never
+    # whatever develop happens to be. Bump together with the layer commit.
+    commit: 651f30e60c7b77b71e8e979d693cf4f67153d1ca
     path: meta/meta-acadia
     layers:
       .:

@@ -3,8 +3,12 @@ name: Build Acadia OS
 on:
   push:
     branches: [develop, master]
+    tags: ['v*']
   pull_request:
     branches: [develop, master]
+  # OS-015: weekly CVE scan against a fresh NVD snapshot.
+  schedule:
+    - cron: '17 3 * * 1'
   # Allow manual trigger for testing builds against a specific board
   workflow_dispatch:
     inputs:
@@ -35,6 +39,9 @@ jobs:
           make lint-reproducibility || true
       - name: Production image hardening (task 53)
         run: make lint-hardening
+      - name: meta-acadia is pinned to a commit (OS-031)
+        run: |
+          grep -qE '^\s+commit: [0-9a-f]{40}$' kas/repos/meta-acadia.yaml
       - name: kas configs are valid YAML
         run: |
           python3 - <<'PY'
@@ -110,13 +117,14 @@ jobs:
           kas build kas/boards/${{ matrix.board }}.yaml --target acadia-image
 
       # ── Collect artifacts ──────────────────────────────────────────────────
-      - name: Upload SD card image artifacts
+      - name: Upload SD card image artifacts (+ SPDX SBOM, OS-015)
         uses: actions/upload-artifact@v4
         with:
           name: acadia-image-${{ matrix.board }}-${{ github.sha }}
           path: |
             build/tmp/deploy/images/**/*.wic.bz2
             build/tmp/deploy/images/**/*.wic.bmap
+            build/tmp/deploy/images/**/*.rootfs.spdx.tar.zst
           retention-days: 14
 
       # Task 44: verify the built .swu's signature against the committed public
@@ -152,6 +160,93 @@ jobs:
             build/tmp/log/
             build/tmp/work/**/temp/log.*
           retention-days: 7
+
+  # OS-068: the release pipeline signs with the vault key. Runs for release
+  # tags and manual dispatch only, on the self-hosted builder (which holds the
+  # sstate cache). The private key exists on disk only for the duration of
+  # `make swu` and is never echoed; the bundle is verified against the
+  # committed public key before it is published.
+  release-swu:
+    name: Signed OTA bundle — ${{ matrix.board }}
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, yocto-builder]
+    environment: release
+    strategy:
+      matrix:
+        board: [rpi5]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install signing key from the vault
+        env:
+          SWUPDATE_PRIVATE_KEY: ${{ secrets.SWUPDATE_PRIVATE_KEY }}
+        run: |
+          test -n "$SWUPDATE_PRIVATE_KEY" || { echo "SWUPDATE_PRIVATE_KEY secret is not configured"; exit 1; }
+          umask 077
+          printf '%s\n' "$SWUPDATE_PRIVATE_KEY" > meta/meta-acadia/swupdate/keys/swupdate-private.pem
+      - name: Build and sign the .swu
+        run: make swu BOARD=${{ matrix.board }} SWU_VERSION="${GITHUB_REF_NAME#v}"
+      - name: Remove signing key
+        if: always()
+        run: shred -u meta/meta-acadia/swupdate/keys/swupdate-private.pem 2>/dev/null || rm -f meta/meta-acadia/swupdate/keys/swupdate-private.pem
+      - name: Verify against the committed public key + release evidence
+        run: |
+          SWU=$(ls -t build/*.swu | head -1)
+          make verify-swu SWU_FILE="$SWU"
+          DEP=$(ls -td deploy/images/${{ matrix.board }}_* | head -1)
+          cp "$SWU" "$DEP/"
+          make release-evidence BOARD=${{ matrix.board }} DEPLOY_DIR="$DEP" SWU_FILE="$DEP/$(basename "$SWU")"
+      - name: Upload signed release
+        uses: actions/upload-artifact@v4
+        with:
+          name: acadia-release-${{ matrix.board }}-${{ github.ref_name }}
+          path: deploy/images/${{ matrix.board }}_*/
+          retention-days: 90
+
+  # OS-065: hardware-in-the-loop update / confirm / forced-rollback on a real
+  # board. Needs a runner labelled hil-rpi5 wired to the board's network and a
+  # power switch (HIL_POWER_CYCLE); see scripts/hil-ota.sh.
+  hil-ota:
+    name: HIL OTA — rpi5
+    needs: release-swu
+    runs-on: [self-hosted, hil-rpi5]
+    environment: hil
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: acadia-release-rpi5-${{ github.ref_name }}
+          path: release
+      - name: Update, confirm, forced rollback
+        env:
+          HIL_DEVICE: ${{ vars.HIL_DEVICE }}
+          HIL_USER: ${{ secrets.HIL_USER }}
+          HIL_PASS: ${{ secrets.HIL_PASS }}
+          HIL_POWER_CYCLE: ${{ vars.HIL_POWER_CYCLE }}
+          HIL_INSECURE: '1'
+        run: HIL_SWU="$(find release -name '*.swu' | head -1)" scripts/hil-ota.sh
+
+  # OS-015: CVE report for the current image, weekly and on demand.
+  cve-scan:
+    name: CVE scan — rpi5
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, yocto-builder]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build with cve-check
+        env:
+          NVDCVE_API_KEY: ${{ secrets.NVDCVE_API_KEY }}
+        run: make cve-check BOARD=rpi5
+      - name: Upload CVE report + SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: acadia-cve-rpi5-${{ github.sha }}
+          path: |
+            deploy/images/rpi5_*/*.cve.json
+            deploy/images/rpi5_*/*.spdx.tar.zst
+          retention-days: 90
 
   secret-scan:
     name: OTA signing secret scan + key hygiene (task 43)
