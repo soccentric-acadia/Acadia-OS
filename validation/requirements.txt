@@ -1,0 +1,2 @@
+# Host-side dependencies for the Acadia validation suite (x86 linux).
+paramiko>=3.4

@@ -1,0 +1,160 @@
+# Acadia Validation Suite — Architecture
+
+Post-boot feature validation for Acadia-OS images. The build makes promises
+(everything installed and wired by `meta/meta-acadia`); this suite verifies
+those promises on a **booted device**, driven from an **x86 Linux host**.
+
+## Goals
+
+1. **Promise-oriented** — every check maps to a concrete deliverable in
+   `meta/meta-acadia` (a recipe, a systemd unit, a package, a partition, a
+   policy). If a check fails, it names the promise that was broken.
+2. **Host-driven, SSH-based** — the suite runs on the x86 host and
+   interrogates the booted Pi over SSH (username + password by default; SSH
+   key supported). The target needs nothing installed.
+3. **Modular and extensible** — one Python module per feature area. Adding a
+   feature means adding a `t<NN>_<name>.py` file with `check_*` methods; the
+   runner discovers it automatically.
+4. **Skips, not false failures** — checks distinguish *build promises* (FAIL
+   when broken) from *environment conditions* (no camera module attached, no
+   CAN transceiver, unprovisioned device → SKIP/WARN with a reason). A clean
+   bench run must be interpretable.
+5. **One top-level entry point** — `make validate` from `validation/`.
+
+## Non-goals (v1)
+
+- No destructive tests (OTA install, factory wipe). The A/B install flow is
+  covered by `scripts/hil-ota.sh`; this suite only validates the *standing*
+  OTA readiness contract.
+- No serial-console transport (SSH only). Serial boot capture can be layered
+  on later.
+- No parallel multi-board fan-out. Run one `make validate` per bench device.
+
+## Layout
+
+```
+validation/
+├── Makefile                  # top-level entry: make list / validate / smoke
+├── ARCHITECTURE.md           # this document
+├── PLAN.md                   # approved plan and scope
+├── README.md                 # usage
+├── requirements.txt          # paramiko (only external dependency)
+├── acadia_validation/        # framework (no per-feature knowledge)
+│   ├── config.py             # target config, env fallbacks
+│   ├── connection.py         # SSH (paramiko): exec, timeout, sudo, caching
+│   ├── base.py               # FeatureSuite base class, check registry, results
+│   ├── results.py            # Report: counts, JSON, Markdown, exit code
+│   ├── runner.py             # suite discovery, filtering, execution
+│   └── cli.py                # argument parsing, password resolution, reporting
+├── tests/                    # ONE MODULE PER FEATURE AREA (modular)
+│   ├── t01_boot_system.py    # os-release, PREEMPT_RT kernel, failed units
+│   ├── t02_storage_layout.py # A/B slots, /pst, /home, bind mounts
+│   ├── t03_packages.py       # promised packages, middleware, ptest, tools
+│   ├── t04_services.py       # every promised systemd unit's state
+│   ├── t05_network.py        # eth0/wlan0, sshd, listening sockets
+│   ├── t06_security.py       # sshd policy, nftables, sudoers, accounts
+│   ├── t07_instrumentation.py# instr-istate + spokes (rpi4/5/cm5)
+│   ├── t08_webconfig.py      # webconfigd/applyd, TLS endpoint, polkit
+│   ├── t09_ota_ab.py         # swupdate daemon, inactive-slot contract
+│   ├── t10_hardware.py       # i2c/spi/gpio/uart/pcie/usb/1-wire/thermal
+│   ├── t11_multimedia.py     # libcamera, gstreamer, v4l2, DRM, ALSA
+│   ├── t12_time_sync.py      # chrony, RTC, rtc-sync units
+│   ├── t13_logging.py        # persistent journal, rsyslog, dmesg capture
+│   └── t14_identity.py       # device identity, factory provisioning, HAL
+└── reports/                  # generated reports (gitignored)
+```
+
+## Execution flow
+
+```
+make validate HOST=... PASS=...
+        │
+        ▼
+  cli: resolve target + credentials (arg > env > getpass prompt)
+        │
+        ▼
+  runner: import tests/*  →  collect FeatureSuite subclasses
+          filter by --groups / --only / board applicability
+        │
+        ▼
+  connection: SSH auth (password default, key optional)
+          ├─ fail → exit 2 ("device did not present the image")
+          └─ ok   → probe sudo once (sudo -n true), cache result
+        │
+        ▼
+  per suite: each check_* runs in order, wrapped so no exception
+  escapes a single check (exceptions become FAIL with traceback text)
+        │
+        ▼
+  report: console table + reports/<ts>-<host>.{json,md}
+        │
+        ▼
+  exit code: 0 all PASS/SKIP · 1 any FAIL (or SKIP under --strict)
+             2 connection failure
+```
+
+## Key design decisions
+
+### Authentication
+
+Password SSH is the default (bench requirement). The production image ships
+`PasswordAuthentication no` with key-only access (`acadia-hardening.conf`),
+so:
+
+- bench/test images used with this suite must have password auth enabled, or
+- pass `--key FILE` to use key auth against a production-hardened device, or
+- use `--allow-password-ssh` to have the security suite *downgrade* the
+  password-policy mismatch from FAIL to WARN when password auth is
+  deliberate on your bench.
+
+The suite never bakes credentials: they come from CLI args, `VALIDATION_*`
+environment variables, or an interactive prompt. `reports/` never contains
+the password.
+
+### Privileges
+
+Checks needing root (`sshd -T`, `nft list ruleset`, EEPROM queries) first
+probe `sudo -n true`. Passwordless sudo (as configured by
+`acadia-hardening`'s sudoers drop-in for the admin path) enables the full
+check; without it, those checks degrade to file-presence evidence or SKIP —
+never a crash.
+
+### Board awareness
+
+Suites declare `boards = (...)`; the runner matches against the machine
+derived from `/proc/device-tree/model` (Raspberry Pi 5 → `raspberrypi5`,
+CM5 → `raspberrypi-cm5`, Pi 4 → `raspberrypi4-64`, …). Non-matching suites
+are skipped up front with a reason. Board-conditional *checks* (A/B layout,
+expand-rootfs policy) query the machine at runtime inside the check.
+
+### Result statuses
+
+| Status | Meaning |
+|--------|---------|
+| PASS   | promise verified |
+| FAIL   | promise broken (counts toward exit code) |
+| SKIP   | not applicable / environment condition (reason recorded) |
+| WARN   | passes with a noteworthy observation |
+
+`--strict` (CI mode) turns SKIP into failure: a bench must prove everything.
+
+## Extension guide
+
+1. Create `tests/t<NN>_<feature>.py`.
+2. Define a `FeatureSuite` subclass; set `name`, `description`, `groups`,
+   and optional `boards`.
+3. Add `check_<something>` methods. Use `self.run()`, `self.cat()`,
+   `self.exists()`; return `self.passed()/self.failed()/self.skipped()/self.warned()`.
+4. Nothing else. Discovery, reporting, Makefile targets pick it up.
+5. When the promise comes from a new recipe, keep the check comment tied to
+   the recipe/task so the promise↔test traceability stays visible.
+
+## Relationship to other validation in this repo
+
+| Layer | Scope | When |
+|-------|-------|------|
+| `bats` tests in `meta/meta-acadia/*/tests/` | recipe/build-time logic | build host |
+| `make validate` / `make check-board` | BitBake metadata & wiring | build host |
+| `scripts/check-image-packages.sh` | package resolvability gate | build host |
+| `validation/` (this suite) | **booted target feature promises** | bench, post-flash |
+| `scripts/hil-ota.sh` | destructive A/B OTA flow | bench, HIL fixture |
