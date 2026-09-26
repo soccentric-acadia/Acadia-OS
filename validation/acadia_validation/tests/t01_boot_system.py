@@ -26,6 +26,22 @@ class BootSystemSuite(FeatureSuite):
             return self.failed("; ".join(problems))
         return self.passed(f"PRETTY_NAME={osr.get('PRETTY_NAME', '?')}")
 
+    def check_build_pairing(self):
+        """Booted image pairs with the manifest (see
+        tools/generate-manifest.sh): machine + VERSION_ID."""
+        from acadia_validation.manifest import pairing_problems
+        manifest = getattr(self.conn, "manifest", None)
+        if not manifest:
+            return self.skipped("no --manifest given "
+                                "(generate with tools/generate-manifest.sh)")
+        problems = pairing_problems(manifest, self.conn.os_release(),
+                                    self.machine(), self.conn.model())
+        if problems:
+            return self.failed("; ".join(problems))
+        return self.passed(f"target pairs with build "
+                           f"{manifest.get('build_id', '?')} "
+                           f"(version {manifest.get('version_id', '?')})")
+
     def check_boot_model(self):
         """/proc/device-tree/model — board the image is running on."""
         model = self.conn.model()

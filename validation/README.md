@@ -11,15 +11,19 @@ for scope and coverage matrix.
 ```bash
 cd validation
 make list                     # see suites and groups
-make setup                    # once: venv + paramiko
+make list -- --trace          # promise→check traceability map
+make setup                    # once: venv + paramiko + pyserial
 make validate HOST=192.168.1.50          # password prompted
 make validate HOST=192.168.1.50 PASS='secret' USER=rpi
+make validate HOST=192.168.1.50 MANIFEST=manifest.json   # paired to build
 make smoke HOST=192.168.1.50  # fast core subset
 ```
 
 Reports land in `reports/report-<ts>-<host>.{json,md}`; exit code is 0 only
 when nothing failed (2 = device unreachable, 1 = failed checks; with
-`STRICT=1` skips also fail — CI mode).
+`STRICT=1` skips also fail — CI mode). `--verbose` streams every check as
+it runs; `--diff A.json B.json` compares two reports (exit 1 on
+regressions).
 
 ## Selecting suites
 
@@ -28,10 +32,12 @@ make validate HOST=... GROUPS=hardware,ota   # by group
 make validate HOST=... ONLY=t01,services     # by suite name/number
 make validate HOST=... EXCLUDE=multimedia
 python3 -m acadia_validation --list          # all suites
+python3 -m acadia_validation --list --trace  # + promise→check map
 ```
 
 Groups: `core boot storage packages services network security
-instrumentation webconfig ota hardware multimedia time logging identity`.
+instrumentation webconfig ota hardware multimedia time logging identity
+rt`.
 
 ## SSH authentication
 
@@ -45,6 +51,62 @@ instrumentation webconfig ota hardware multimedia time logging identity`.
 The suite runs privileged checks with passwordless `sudo -n` when the
 target allows it; without sudo those checks degrade to evidence-based or
 SKIP — never a crash.
+
+## Pairing to a build (manifest)
+
+After `make build && make deploy-images` in the repo root:
+
+```bash
+make manifest                     # reads newest deploy/images/<board>_<ts>
+make validate HOST=... MANIFEST=manifest.json
+```
+
+The manifest carries the built package list (from the Yocto rootfs
+`.manifest`), machine, and os-release VERSION_ID. `t03` then diffs
+*actual vs declared* packages and `t01` pairs the booted image with the
+build — no more frozen recipe copies drifting out of sync.
+
+## Fleet mode
+
+```bash
+# fleet.txt (chmod 600, gitignored):  host user password [keypath]
+192.168.1.50 rpi secret
+192.168.1.51 rpi secret
+make validate-all INVENTORY=fleet.txt PARALLEL=2 [GROUPS=] [MANIFEST=]
+```
+
+Every target runs the same selection; you get a per-host ✓/✗ line and an
+aggregated `reports/fleet-<ts>.json`. Exit 1 on any failure or unreachable
+target.
+
+## Serial boot check (SSH cannot see the boot)
+
+```bash
+make serial PORT=/dev/ttyUSB0 BAUD=115200 TIMEOUT=120 [REBOOT_CMD='...']
+```
+
+Passive UART watcher: kernel output, panic/oops scan, login prompt within
+the timeout. `REBOOT_CMD` (power relay / ssh reboot) makes it repeatable.
+
+## Timing budgets
+
+`t15_rt_diagnostics` measures instead of assuming: boot-to-userspace
+(`--boot-budget`, default 180 s) and a bounded 10 s `cyclictest` Avg
+latency (`--latency-budget`, default 1000 µs) — that is what `rt-tests`
+ships for.
+
+## Privileged checks (sudo)
+
+Privileged checks (`sshd -T`, `nft list ruleset`, `cyclictest -m`,
+`rpicam-still`, `rpi-eeprom-update`) probe passwordless `sudo -n` once and
+degrade to evidence/SKIP without it. For a complete run, give the bench
+SSH user a NOPASSWD sudoers drop-in — the shipped `acadia-sudoers` only
+opens specific paths for the apply daemon, not the bench user:
+
+```conf
+# /etc/sudoers.d/acadia-validation (bench only)
+rpi ALL=(root) NOPASSWD: /usr/sbin/sshd, /usr/sbin/nft, /usr/bin/cyclictest, /usr/bin/rpicam-still, /usr/bin/rpi-eeprom-update
+```
 
 ## Result statuses
 

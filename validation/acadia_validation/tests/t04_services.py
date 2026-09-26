@@ -98,6 +98,22 @@ class ServicesSuite(FeatureSuite):
                        "| head -2").stdout.strip().replace("\n", " | ")
         return self.passed(f"timers active; next: {nxt}")
 
+    def check_watchdog_ready(self):
+        """watchdog daemon + hardware node + acadia watchdog.conf."""
+        problems = []
+        if not self.exists("/dev/watchdog"):
+            problems.append("/dev/watchdog missing (hardware node)")
+        r = self.run("grep -q . /etc/watchdog.conf 2>/dev/null")
+        if not r.ok:
+            problems.append("/etc/watchdog.conf missing/empty "
+                            "(acadia-services)")
+        if problems:
+            return self.failed("; ".join(problems))
+        timeout = self.run("grep -E '^watchdog-timeout' /etc/watchdog.conf "
+                           "2>/dev/null | head -1").stdout.strip()
+        return self.passed(f"/dev/watchdog + config present"
+                           + (f" ({timeout})" if timeout else ""))
+
     def check_rsyslog_active(self):
         """T-P29: remote syslog transport for WebConfig."""
         st = self.unit_state("rsyslog.service")

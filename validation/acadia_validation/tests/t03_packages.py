@@ -37,8 +37,8 @@ class PackagesSuite(FeatureSuite):
         pm = r.stdout.strip()
         return pm or None
 
-    def _missing_packages(self, pm: str) -> list:
-        pkgs = " ".join(REQUIRED_PACKAGES)
+    def _missing_packages(self, pm: str, pkgs) -> list:
+        pkgs = " ".join(pkgs)
         if pm == "rpm":
             cmd = (f"for p in {pkgs}; do rpm -q \"$p\" >/dev/null 2>&1 "
                    f"|| echo \"missing:$p\"; done")
@@ -58,17 +58,27 @@ class PackagesSuite(FeatureSuite):
                                 "(package-management feature absent)")
         return self.passed(f"{pm} available")
 
+    def _package_list(self):
+        """Promised packages: manifest (built truth) if provided, else the
+        static copy of acadia-image.bb's IMAGE_INSTALL set."""
+        manifest = getattr(self.conn, "manifest", None)
+        if manifest and manifest.get("packages"):
+            return manifest["packages"], True
+        return REQUIRED_PACKAGES, False
+
     def check_required_packages_installed(self):
-        """Every package acadia-image.bb installs must be on the target."""
+        """Every package the build declares must be on the target."""
         pm = self._package_manager()
         if not pm:
             return self.skipped("no package manager to verify against")
-        missing = self._missing_packages(pm)
+        pkgs, from_manifest = self._package_list()
+        missing = self._missing_packages(pm, pkgs)
         if missing:
             return self.failed(f"{len(missing)} missing: "
                                f"{', '.join(missing)}")
-        return self.passed(f"all {len(REQUIRED_PACKAGES)} promised "
-                           f"packages installed ({pm})")
+        src = "manifest" if from_manifest else "image-recipe copy"
+        return self.passed(f"all {len(pkgs)} promised packages "
+                           f"installed ({pm}, source: {src})")
 
     def check_middleware_libraries(self):
         """packagegroup-acadia-middleware: gRPC + protobuf libs (no
@@ -90,6 +100,18 @@ class PackagesSuite(FeatureSuite):
         if count > 0:
             return self.passed(f"{count} -ptest packages installed")
         return self.failed("no -ptest packages found (ptest-pkgs feature)")
+
+    def check_ptest_runner(self):
+        """ptest-runner present and enumerating suites (§12 ptest support)."""
+        r = self.run("command -v ptest-runner")
+        if not r.ok:
+            return self.failed("ptest-runner binary missing")
+        count = self.count_lines("ptest-runner -l 2>/dev/null | grep -c . ",
+                                 default=-1)
+        if count < 0:
+            return self.passed("ptest-runner present "
+                               "(no enumerable suites)")
+        return self.passed(f"ptest-runner present, {count} suites listed")
 
     def check_feature_tool_binaries(self):
         """/usr/bin tools backing the promised feature set."""

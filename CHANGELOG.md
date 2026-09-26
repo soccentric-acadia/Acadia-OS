@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-09-26 — Validation suite improvements pass
+
+- `validation/` (post-boot feature validation, OS `60568ea`) extended:
+  - **Manifest-driven validation**: `tools/generate-manifest.sh` builds a
+    manifest from the deploy dir's Yocto rootfs `.manifest`; `t03` diffs
+    actual vs declared packages and the target is paired against the build
+    (machine + os-release VERSION_ID). `make validate MANIFEST=...`.
+  - **Serial boot check**: passive UART boot-chain watcher
+    (`make serial PORT=/dev/ttyUSB0`) — kernel output, panic scan, login
+    prompt within a timeout.
+  - **Fleet mode**: `make validate-all INVENTORY=fleet.txt PARALLEL=2`
+    validates every bench device, aggregated fleet report (exit 1 on any
+    failure/unreachable).
+  - **Timing gates**: `t15_rt_diagnostics` — `systemd-analyze` boot budget
+    (`--boot-budget`) and a bounded 10 s cyclictest Avg-latency budget
+    (`--latency-budget`).
+  - **WebConfig API auth smoke** (login + whoami, optional credentials),
+    **Pico W UART2 link check** (`/dev/ttyAMA2`, T-P15), actual camera
+    capture (`rpicam-still`), watchdog hardware/config readiness,
+    `ptest-runner` enumeration, **report diff** (`--diff`, exit 1 on
+    regressions), **--trace** (promise→check map), **--verbose** live
+    streaming, CAN check sharpened to the pinned MCP2515 overlay.
+- Validation: `make lint` + full mock-device run (95 checks PASS) + CLI
+  mode tests (strict, filters, fleet, diff, connection failure). Serial
+  capture and manifest generation need a bench device / deploy dir.
+
 ## 2026-09-24 — Integration-production pass (OS-072, T-P29/30, T-P35)
 
 - OS-072: kas parses again, the polkit distro feature is enabled, and swupdate-client is added to the gate.

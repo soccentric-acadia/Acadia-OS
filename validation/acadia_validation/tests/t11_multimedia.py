@@ -72,6 +72,26 @@ class MultimediaSuite(FeatureSuite):
                                "(no audio HAT)")
         return self.failed("aplay missing (alsa-utils promise)")
 
+    def check_camera_capture(self):
+        """Actual capture when a camera is attached (rpicam-still, read-only
+        on the FS; skipped without a camera)."""
+        r = self.run("rpicam-hello --list-cameras 2>&1", timeout=30)
+        cams = [l for l in r.stdout.splitlines() if l.strip()[:1].isdigit()]
+        if not cams:
+            return self.skipped("no camera module attached")
+        run = self.run_priv("rpicam-still -o /tmp/.acadia-val.jpg "
+                            "--width 640 --height 480 -t 2000 2>&1",
+                            timeout=60)
+        if run is None:
+            return self.skipped("capture needs root and no passwordless "
+                                "sudo")
+        if run.ok and self.exists("/tmp/.acadia-val.jpg"):
+            self.run("rm -f /tmp/.acadia-val.jpg")
+            return self.passed(f"captured 640x480 still from {len(cams)} "
+                               "camera(s)")
+        return self.warned(f"camera present but capture failed: "
+                           f"{(run.stdout.strip() or run.stderr.strip())[:120]}")
+
     def check_camera_capture_service(self):
         """acadia-camera ships inert unless ENABLED=1 in its conf."""
         conf = self.conn.cat("/etc/acadia/camera-capture.conf")

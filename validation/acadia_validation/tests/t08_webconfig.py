@@ -50,6 +50,37 @@ class WebConfigSuite(FeatureSuite):
             return self.passed(f"HTTPS answered HTTP {code}")
         return self.failed(f"HTTPS endpoint not reachable (code={code!r})")
 
+    def check_webconfig_api_auth(self):
+        """API smoke: /api/v1/auth/login + /auth/whoami (read-only;
+        same endpoints scripts/hil-ota.sh uses). Optional creds."""
+        user = self.conn.cfg.webconfig_user
+        password = self.conn.cfg.webconfig_pass
+        if not user or not password:
+            return self.skipped("no --webconfig-user/--webconfig-pass "
+                                "(login smoke skipped)")
+        r = self.run(
+            f"J=$(mktemp); code=$(curl -k -s -o /dev/null "
+            f"-w '%{{http_code}}' --max-time 10 -c $J "
+            f"-H 'Content-Type: application/json' "
+            f"-d '{{\"username\":\"{user}\","
+            f"\"password\":\"{password}\"}}' "
+            f"https://127.0.0.1/api/v1/auth/login 2>/dev/null); "
+            f"whoami=$(curl -k -s -b $J https://127.0.0.1/api/v1/auth/whoami "
+            f"2>/dev/null | grep -c csrf); rm -f $J; "
+            f"echo \"$code $whoami\"")
+        out = r.stdout.strip().split()
+        code = out[0] if out else "000"
+        has_csrf = len(out) > 1 and out[1] != "0"
+        if code == "200" and has_csrf:
+            return self.passed(f"login OK (HTTP 200), whoami CSRF present")
+        if code in ("401", "403"):
+            return self.failed(f"login rejected (HTTP {code}) — "
+                               f"credentials wrong or API changed")
+        if code == "000":
+            return self.failed("API endpoint unreachable")
+        return self.warned(f"login HTTP {code}, csrf={'yes' if has_csrf else 'no'} "
+                           "(unexpected API response shape)")
+
     def check_polkit_rule(self):
         """SB-2: shipped 50-webconfigd.polkit.rules authorizes zbus path."""
         r = self.run("ls /etc/polkit-1/rules.d/ 2>/dev/null | "

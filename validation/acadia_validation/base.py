@@ -202,5 +202,8 @@ def run_suite(suite: FeatureSuite) -> SuiteResult:
         res.elapsed = round(time.monotonic() - start, 3)
         res.suite = suite.name
         res.name = name
+        if getattr(suite.conn.cfg, "verbose", False):
+            print(f"  [{suite.name}] {name}: {res.status.value} "
+                  f"— {res.detail}", flush=True)
         result.results.append(res)
     return result

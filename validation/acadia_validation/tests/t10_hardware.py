@@ -85,13 +85,27 @@ class HardwareSuite(FeatureSuite):
             "ls /sys/class/thermal/ 2>/dev/null | grep -c cooling_device")
         return self.passed(f"CPU {temp:.1f}°C, cooling devices={cooling}")
 
+    def check_pico_coprocessor_link(self):
+        """T-P15: Pico W co-processor on RP1 UART2 (dtoverlay=uart2,
+        kas/common.yaml) — expected node /dev/ttyAMA2."""
+        if not self.machine().startswith(("raspberrypi5", "raspberrypi-cm5")):
+            return self.skipped("Pico co-processor link is rpi5/cm5-only")
+        r = self.run("test -e /dev/ttyAMA2")
+        if r.ok:
+            return self.passed("/dev/ttyAMA2 present (uart2 overlay applied; "
+                               "Pico attachedness needs HIL fixture)")
+        return self.failed("/dev/ttyAMA2 missing (uart2 overlay for the "
+                           "Pico co-processor link, T-P15)")
+
     def check_can_interfaces(self):
-        """can-utils installed; interfaces need a transceiver/HAT."""
+        """MCP2515 CAN controller overlay is pinned (kas/common.yaml
+        dtoverlay=mcp2515-can0); interface presence needs the chip."""
         count = self.count_lines(
             "ip -o link show type can 2>/dev/null | grep -c .")
         if count > 0:
             return self.passed(f"{count} CAN interface(s)")
-        return self.warned("no CAN interface (transceiver/HAT optional)")
+        return self.warned("no CAN interface (MCP2515 overlay pinned but "
+                           "controller chip may not be populated)")
 
     def check_sensors(self):
         """lm-sensors inspection (hardware-absent tolerated)."""

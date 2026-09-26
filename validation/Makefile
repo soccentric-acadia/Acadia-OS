@@ -31,6 +31,9 @@ endif
 ifneq ($(strip $(KEY)),)
 ARGS += --key '$(KEY)'
 endif
+ifneq ($(strip $(MANIFEST)),)
+ARGS += --manifest '$(MANIFEST)'
+endif
 ifneq ($(strip $(GROUPS)),)
 ARGS += --groups '$(GROUPS)'
 endif
@@ -44,7 +47,25 @@ ifeq ($(strip $(STRICT)),1)
 ARGS += --strict
 endif
 
-.PHONY: help setup list validate smoke lint report clean
+PYRUN := $(shell test -x $(VENV_PY) && echo $(VENV_PY) || echo $(PY))
+
+.PHONY: help setup list validate smoke lint report report-diff clean manifest serial validate-all
+
+manifest: ## Generate build manifest from newest deploy dir  (DEPLOY_DIR= optional)
+	@bash tools/generate-manifest.sh $(if $(DEPLOY_DIR),'$(DEPLOY_DIR)',)
+
+serial: ## Passive boot-chain check over UART  (PORT=/dev/ttyUSB0 BAUD=115200 TIMEOUT=120 [REBOOT_CMD=...])
+	@if [ -z '$(PORT)' ]; then echo "usage: make serial PORT=/dev/ttyUSB0 [BAUD=115200] [TIMEOUT=120] [REBOOT_CMD='...']"; exit 2; fi
+	@$(PYRUN) -m acadia_validation.serial_console --port '$(PORT)' --baud $(or $(BAUD),115200) --timeout $(or $(TIMEOUT),120) $(if $(REBOOT_CMD),--reboot-command '$(REBOOT_CMD)',)
+
+validate-all: ## Fleet: validate every INVENTORY line (host user password [key])  (PARALLEL=2 MANIFEST= STRICT=1)
+	@if [ -z '$(INVENTORY)' ]; then echo "usage: make validate-all INVENTORY=fleet.txt [PARALLEL=2] [GROUPS=] [ONLY=] [MANIFEST=]"; exit 2; fi
+	@$(RUNNER) --inventory '$(INVENTORY)' \
+		$(if $(PARALLEL),--parallel $(PARALLEL),) \
+		$(if $(GROUPS),--groups '$(GROUPS)',) \
+		$(if $(ONLY),--only '$(ONLY)',) \
+		$(if $(MANIFEST),--manifest '$(MANIFEST)',) \
+		$(if $(filter 1,$(STRICT)),--strict,)
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) \
@@ -75,6 +96,10 @@ report: ## Print the most recent Markdown report
 	@latest=$$(ls -t reports/*.md 2>/dev/null | head -1); \
 	if [ -n "$$latest" ]; then cat "$$latest"; \
 	else echo "no reports yet — run make validate HOST=..."; exit 1; fi
+
+report-diff: ## Compare two reports; exit 1 on regressions  (A=old.json B=new.json)
+	@if [ -z '$(A)' ] || [ -z '$(B)' ]; then echo "usage: make report-diff A=old.json B=new.json"; exit 2; fi
+	@$(RUNNER) --diff '$(A)' '$(B)'
 
 clean: ## Remove generated reports
 	rm -rf reports
