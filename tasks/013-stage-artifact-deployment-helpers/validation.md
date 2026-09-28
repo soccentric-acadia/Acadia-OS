@@ -11,6 +11,15 @@ Parent task: [`tasks/013-stage-artifact-deployment-helpers/validation.md`](../..
 | Yocto build | skipped | No metadata or artifact-generation behavior changed; only existing deploy copies were extended. |
 | Hardware flash and SWUpdate | skipped | Needs a disposable SD card, supported target, signing key, configured SSH, and maintenance window. |
 
+## Independent implementation audit
+
+An independent reviewer found and the implementation corrected a root-disk
+alias bypass and missing destructive/failure-path coverage. The final
+certification found no remaining issues and scored the task **100/100**:
+30/30 required behavior, 30/30 safety, 25/25 validation evidence, and 15/15
+documentation/task records. Physical hardware checks remain the only
+environment-gated risk.
+
 ## Commands
 
 ```sh
@@ -23,4 +32,3 @@ make deploy-images deploy-sdk deploy-esdk deploy-swu \
 make verify DEPLOY_DIR=/tmp/acadia-task013-deploy/images/rpi5_20260928_151522
 make verify DEPLOY_DIR=/tmp/acadia-task013-deploy/swu/rpi5_20260928_151522
 ```
-

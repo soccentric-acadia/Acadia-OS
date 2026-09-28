@@ -10,18 +10,22 @@ die() {
 
 [[ $# -eq 1 ]] || die "usage: $(basename "$0") /dev/sdX"
 
-device="$1"
+device="$(readlink -f -- "$1")"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 [[ -b "$device" ]] || die "$device is not a block device"
 [[ "$(lsblk -dn -o TYPE "$device")" == "disk" ]] ||
     die "$device is not a whole-disk device; specify its parent disk"
 
-root_source="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
-root_parent="$(lsblk -no PKNAME "$root_source" 2>/dev/null || true)"
-if [[ -n "$root_parent" && "$device" == "/dev/$root_parent" ]]; then
-    die "refusing to overwrite the host root disk: $device"
-fi
+root_source="$(findmnt -n -o SOURCE / 2>/dev/null)" ||
+    die "cannot determine the host root filesystem source"
+mapfile -t root_backing_devices < <(lsblk -s -l -n -p -o NAME "$root_source" 2>/dev/null)
+[[ ${#root_backing_devices[@]} -gt 0 ]] ||
+    die "cannot determine the block devices backing the host root filesystem"
+for root_device in "${root_backing_devices[@]}"; do
+    [[ "$device" != "$(readlink -f -- "$root_device")" ]] ||
+        die "refusing to overwrite the host root disk: $device"
+done
 
 shopt -s nullglob
 images=("$script_dir"/*.wic.bz2)
@@ -36,7 +40,8 @@ bmap="${image%.bz2}.bmap"
 echo "The WIC image owns the complete partition layout, including the FAT32 boot partition."
 echo "It will permanently erase every partition on $device:"
 lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS "$device"
-read -r -p "Type the exact device path ($device) to continue: " confirmation
+printf 'Type the exact device path (%s) to continue: ' "$device" >&2
+read -r confirmation
 [[ "$confirmation" == "$device" ]] || die "confirmation did not match; no data was written"
 
 while IFS= read -r child; do
@@ -53,4 +58,3 @@ echo "Writing $(basename "$image") to $device ..."
 sudo bmaptool copy --bmap "$bmap" "$image" "$device"
 sync
 echo "Complete. Safely eject $device before removing the SD card."
-
