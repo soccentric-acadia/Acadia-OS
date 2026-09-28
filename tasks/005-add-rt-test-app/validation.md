@@ -1,7 +1,10 @@
 # Task 005 validation — `rt-test` standalone RT test application (Acadia-OS)
 
 - **Date:** 2026-09-21
-- **Status:** pending — image build blocked on the Acadia-Instrumentation commit + SRCREV bump
+- **Status:** build + packaging verified 2026-09-28 — image
+  `rpi5_20260928_104811` (rootfs-20260924142709, built 2026-09-24) contains
+  `/usr/bin/instr-rt-test` (SRCREV pin `3d03ba6` ⊇ commit `3e885c2`);
+  on-target RT/non-RT runs still pending hardware
 
 ## Evidence so far
 
@@ -12,8 +15,9 @@
 
 ## Pending
 
-- `make build rpi5` after: Acadia-Instrumentation commit → `INSTR_SRCREV`
-  bump → verify `/usr/bin/instr-rt-test` present in the built image.
+- ~~`make build rpi5` with the current pin → verify `/usr/bin/instr-rt-test`
+  in the built image~~ **done 2026-09-28** (artifact verification, no rebuild
+  needed — see parent `validation.md` update).
 - On-target run as root on the RT image + paired non-RT run (owner:
   platform team) — see parent validation.md for the full checklist.
 
