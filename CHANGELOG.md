@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-28 — Task 013: staged artifact deployment helpers
+
+- Every timestamped image, SDK, eSDK, and SWU deploy directory now includes
+  the corresponding executable helper script.
+- `flash-image.sh` requires an explicit confirmed whole-disk target and
+  writes the colocated WIC image with bmaptool. It preserves the WIC-defined
+  FAT32 boot plus root/data partition layout rather than formatting the whole
+  card as FAT32.
+- SDK/eSDK helpers install the colocated Yocto installer into `/tool` using
+  `sudo`. The SWU helper requires a preconfigured SSH known host, copies the
+  colocated signed bundle, and invokes `sudo swupdate -i` on the target.
+- Fixture tests, deploy-target staging, and image/SWU checksum verification
+  passed. Physical flash and target SWUpdate validation remain hardware-gated.
+
 ## 2026-09-26 — Task 010: on-target validation suite (validation-only record)
 
 - Task record added: `tasks/010-on-target-validation-suite/` — the Acadia root

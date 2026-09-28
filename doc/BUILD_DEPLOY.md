@@ -79,6 +79,35 @@ SDK installers are copied to `deploy/sdk/<BOARD>_<timestamp>/`; eSDK installers 
 are also created as `build/<BOARD>-<SWU_VERSION>.swu`. `sdk-image` and `esdk-image` additionally
 build Docker images named `<BOARD>-sdk:latest` and `<BOARD>-esdk:latest` by default.
 
+Each deploy directory includes an executable helper for its colocated artifact:
+
+```sh
+cd deploy/images/rpi5_<timestamp>
+./flash-image.sh /dev/sdX
+
+cd ../../sdk/rpi5_<timestamp>
+./install-sdk.sh
+
+cd ../../esdk/rpi5_<timestamp>
+./install-esdk.sh
+
+cd ../../swu/rpi5_<timestamp>
+./install-swu.sh user@raspberry-pi-host
+```
+
+`flash-image.sh` requires the exact whole-disk device path, rejects the host
+root disk, requires an exact confirmation, unmounts child partitions, and
+uses `sudo bmaptool copy`. Do **not** format the complete SD card as FAT32:
+the WIC image writes its complete partition table, including the FAT32 boot
+partition and the root/data partitions required by Acadia-OS.
+
+`install-sdk.sh` and `install-esdk.sh` use `sudo` to install their respective
+Yocto installers into `/tool`. `install-swu.sh` requires preconfigured SSH
+authentication and a known host; it preserves strict host-key verification,
+copies the signed bundle to `/tmp` on the target, then runs
+`sudo swupdate -i` there. The target must permit that command through its
+`sudo` policy and must accept the bundle's signature.
+
 **Deploy retention (task 012):** each successful `deploy-images`, `deploy-sdk` or `deploy-esdk`
 run prunes its own type directory afterwards, keeping only the newest `DEPLOY_KEEP ?= 1`
 snapshots per board — by default exactly the snapshot that was just written. Pruning never

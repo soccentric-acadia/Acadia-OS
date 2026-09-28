@@ -569,7 +569,8 @@ deploy-images: ## Copy .wic artifacts → deploy/images/BOARD_TS/; prune older (
 	 find "$$src" -maxdepth 1 \( -type f -o -type l \) \
 	     \( -name "*.wic.bz2" -o -name "*.wic.bmap" \) \
 	     -exec cp -L {} "$$out/" \;; \
-	 sbom="$$(ls "$$src"/$(IMAGE_TARGET)-$(MACHINE).rootfs.spdx.tar.zst 2>/dev/null | head -1)"; \
+	 install -m 0755 scripts/flash-image.sh "$$out/flash-image.sh"; \
+	  sbom="$$(ls "$$src"/$(IMAGE_TARGET)-$(MACHINE).rootfs.spdx.tar.zst 2>/dev/null | head -1)"; \
 	 if [ -n "$$sbom" ]; then cp -L "$$sbom" "$$out/"; echo "  SBOM: $$(basename "$$sbom")"; \
 	 else echo "  WARNING: no SPDX SBOM in $$src (OS-015)"; fi; \
 	 echo "  Done: $$out"; \
@@ -586,6 +587,7 @@ deploy-sdk: ## Copy SDK installer   → deploy/sdk/BOARD_TS/; prune older (DEPLO
 	 find "$$src" -maxdepth 1 \( -type f -o -type l \) \
 	     -name '*.sh' ! -name '*-ext-*' \
 	     -exec cp -L {} "$$out/" \;; \
+	 install -m 0755 scripts/install-sdk.sh "$$out/install-sdk.sh"; \
 	 echo "  Done: $$out" && \
 	 $(call deploy-prune,sdk)
 
@@ -599,6 +601,7 @@ deploy-esdk: ## Copy eSDK installer  → deploy/esdk/BOARD_TS/; prune older (DEP
 	 find "$$src" -maxdepth 1 \( -type f -o -type l \) \
 	     -name '*-ext-*.sh' \
 	     -exec cp -L {} "$$out/" \;; \
+	 install -m 0755 scripts/install-esdk.sh "$$out/install-esdk.sh"; \
 	 echo "  Done: $$out" && \
 	 $(call deploy-prune,esdk)
 
@@ -608,6 +611,7 @@ deploy-swu: ## Copy .swu package    → deploy/swu/BOARD_TS/
 	 echo "Deploying SWU → $$out ..."; \
 	 mkdir -p "$$out"; \
 	 cp -L "$(BUILD_DIR)/$(BOARD)-$(SWU_VERSION).swu" "$$out/"; \
+	 install -m 0755 scripts/install-swu.sh "$$out/install-swu.sh"; \
 	 echo "  Done: $$out"; \
 	 $(MAKE) --no-print-directory checksums DEPLOY_DIR=$$out
 
