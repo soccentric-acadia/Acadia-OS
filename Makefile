@@ -331,13 +331,15 @@ ensure-esdk-image: ## Run esdk-image chain only when image is absent
 # -----------------------------------------------------------------------------
 
 ## Build the Yocto image for the selected BOARD (default target)
-build: ensure-image kas-container-script ## Build Yocto SD card image for BOARD
+release-preflight: lint-release-sources check-production-capability ## Verify immutable sources and supported production board
+
+build: release-preflight ensure-image kas-container-script ## Build Yocto SD card image for BOARD
 	@mkdir -p $(BUILD_DIR) $(DL_DIR) $(SSTATE_DIR)
 	$(KAS_RUN) build $(KAS_CONFIG)
 	@$(MAKE) --no-print-directory deploy-images DEPLOY_TS=$(DEPLOY_TS)
 
 ## Clean sstate for the image recipe then rebuild (use after adding packages)
-rebuild-image: ensure-image kas-container-script ## cleansstate image recipe, then rebuild
+rebuild-image: release-preflight ensure-image kas-container-script ## cleansstate image recipe, then rebuild
 	$(KAS_RUN) shell $(KAS_CONFIG) -c "bitbake -c cleansstate $(IMAGE_TARGET)"
 	$(KAS_RUN) build $(KAS_CONFIG)
 	@$(MAKE) --no-print-directory deploy-images DEPLOY_TS=$(DEPLOY_TS)
@@ -764,7 +766,7 @@ lint-swupdate-sync: ## Assert .swu-side and recipe-side pre/post-install.sh matc
 	    echo "  OK: $$script in sync"; \
 	done
 
-lint: lint-swupdate-sync lint-makefile lint-yaml lint-reproducibility lint-image-packages ## Run all lint checks (Makefile syntax, YAML, swupdate sync, image packages)
+lint: lint-swupdate-sync lint-makefile lint-yaml lint-reproducibility lint-release-sources lint-image-packages ## Run all lint checks (Makefile syntax, YAML, release pins, swupdate sync, image packages)
 
 ## Reject AUTOREV in project recipes. Every active git recipe must use a
 ## reviewed 40-character SHA so builds are reproducible and metadata parsing
@@ -782,6 +784,12 @@ lint-reproducibility: ## Reject AUTOREV source revisions
 	    exit 1; \
 	fi; \
 	echo "  OK: no AUTOREV SRCREV values found"
+
+lint-release-sources: ## Verify the complete production source lock (Task 014 P0-03)
+	@bash scripts/check-release-sources.sh
+
+check-production-capability: ## Reject boards outside the Acadia-Hardware production matrix
+	@bash scripts/check-production-capability.sh "$(BOARD)" "$(KAS_CONFIG)"
 
 ## Production image hardening gate (task 53): debug tooling gated, no
 ## empty-root/debug-tweaks, sshd not permitting password/root login.

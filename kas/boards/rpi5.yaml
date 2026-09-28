@@ -6,6 +6,10 @@ header:
 machine: raspberrypi5
 
 local_conf_header:
+  production-hardware-capability: |
+    ACADIA_HARDWARE_MATRIX_VERSION = "1.0.0"
+    ACADIA_HARDWARE_BOARD_REVISION = "rpi5-cm5-bom-rev-c"
+
   wks: |
     # A/B OTA partition layout (see meta-acadia/wic/sdimage-rpi5.wks)
     WKS_FILE = "sdimage-rpi5.wks"
