@@ -79,6 +79,14 @@ SDK installers are copied to `deploy/sdk/<BOARD>_<timestamp>/`; eSDK installers 
 are also created as `build/<BOARD>-<SWU_VERSION>.swu`. `sdk-image` and `esdk-image` additionally
 build Docker images named `<BOARD>-sdk:latest` and `<BOARD>-esdk:latest` by default.
 
+**Deploy retention (task 012):** each successful `deploy-images`, `deploy-sdk` or `deploy-esdk`
+run prunes its own type directory afterwards, keeping only the newest `DEPLOY_KEEP ?= 1`
+snapshots per board — by default exactly the snapshot that was just written. Pruning never
+touches other boards' snapshots, `deploy/swu/`, or the snapshot just written, and runs only
+after the copy (and, for images, the SHA-256 manifest) succeeded. Set `DEPLOY_KEEP=<n>` to keep
+a short history. Consumers are unaffected: they always select the newest copy
+(`validation/tools/generate-manifest.sh` and CI both use `ls -td … | head -1`).
+
 ## 6. Deployment, install, and run
 
 ```sh

@@ -137,6 +137,18 @@ DEPLOY_DIR       ?= $(CURDIR)/deploy
 # snapshot directory and is passed explicitly to recursive make calls.
 DEPLOY_TS        := $(shell date +%Y%m%d_%H%M%S)
 
+# --- Deploy retention (task 012) ---------------------------------------------
+# How many of the newest $(BOARD)_<timestamp> directories to keep per deploy
+# type (images / sdk / esdk) after a successful deploy. The default of 1 keeps
+# exactly the snapshot that was just written; older snapshots for the same
+# board are deleted because no consumer ever reads them — every consumer
+# (validation/tools/generate-manifest.sh, .github/workflows/build.yml, flash)
+# selects the newest copy (ls -td … | head -1). deploy/swu/ is deliberately
+# never pruned: task 012 keeps it out of scope. Override on the command line,
+# e.g. `make image DEPLOY_KEEP=3` to keep a short history, or DEPLOY_KEEP=0 to
+# keep only the fresh copy.
+DEPLOY_KEEP      ?= 1
+
 # SDK / eSDK install paths inside the Docker containers
 SDK_INSTALL_DIR  ?= /opt/poky/sdk
 ESDK_INSTALL_DIR ?= /opt/poky/esdk
@@ -484,12 +496,71 @@ endif
 	@echo "Flashing $(WIC) → $(DEVICE)"
 	bmaptool copy --bmap "$(WIC:.bz2=.bmap)" "$(WIC)" "$(DEVICE)"
 
+# --- Deploy retention: prune old deploy snapshots (task 012) -----------------
+# $(call deploy-prune,<type>) — after a successful deploy of one artifact
+# type, delete older $(DEPLOY_DIR)/<type>/$(BOARD)_<TS> directories so only
+# the newest $(DEPLOY_KEEP) remain. Invoked at the very end of deploy-images,
+# deploy-sdk and deploy-esdk; never for deploy-swu (out of scope, task 012).
+#
+# Guarantees / invariants:
+#   * Only the type directory passed as <type> is touched — the caller owns
+#     it exclusively, so deploy/swu/ and the other types are out of reach
+#     by construction, and nothing outside $(DEPLOY_DIR)/<type> is removed
+#     (the glob is anchored at the full path, never at a cwd).
+#   * Only directories named $(BOARD)_* are candidates — other boards'
+#     snapshots are never matched, let alone removed.
+#   * Newest-first ordering comes from the names themselves: DEPLOY_TS is
+#     always YYYYMMDD_HHMMSS (fixed width), so plain lexicographic order is
+#     chronological order — no dependence on directory mtimes.
+#   * The directory just written by this invocation
+#     ($(DEPLOY_DIR)/<type>/$(BOARD)_$(DEPLOY_TS)) is never removed, even
+#     for DEPLOY_KEEP=0 — the fresh artifact always survives; keep=0 means
+#     "keep only the one just deployed". The guard is enforced twice: the
+#     awk filter drops the fresh path from the candidate list, and the rm
+#     loop refuses to delete it again (defense in depth).
+#   * The call is chained with && from the caller, so it runs only after the
+#     copy (and, for images, the SHA-256 checksum manifest) succeeded; a
+#     failed deploy leaves every existing snapshot untouched.
+#
+# Failure semantics: when the prune runs, the new artifact is already fully
+# written (and verified for images), so a prune error can damage nothing —
+# it would only leave stale copies behind. The prune is therefore
+# best-effort: rm failures print a loud warning but do not fail the deploy
+# (failing here would make a successful deploy look broken to CI while the
+# artifact is actually safe on disk). A non-integer DEPLOY_KEEP is rejected
+# up front and skips pruning entirely rather than guessing.
+#
+# Usage: $(call deploy-prune,images) / ,sdk) / ,esdk)
+define deploy-prune
+	keep='$(DEPLOY_KEEP)'; \
+	case "$$keep" in ''|*[!0-9]*) \
+	    echo "  WARNING: DEPLOY_KEEP='$$keep' is not a non-negative integer — skipping retention prune"; \
+	    exit 0 ;; \
+	esac; \
+	fresh="$(DEPLOY_DIR)/$(1)/$(BOARD)_$(DEPLOY_TS)"; \
+	stale=`ls -1d "$(DEPLOY_DIR)/$(1)/$(BOARD)_"* 2>/dev/null \
+	    | LC_ALL=C sort -r \
+	    | awk -v keep="$$keep" -v fresh="$$fresh" \
+	          'NR > keep && $$0 != fresh { print }'`; \
+	if [ -n "$$stale" ]; then \
+	    echo "  Retention (DEPLOY_KEEP=$$keep): removing old $(1) snapshots for board $(BOARD):"; \
+	    printf '%s\n' "$$stale" | while IFS= read -r old; do \
+	        if [ "$$old" = "$$fresh" ]; then \
+	            echo "    GUARD: refusing to remove the fresh snapshot $$old"; \
+	            continue; \
+	        fi; \
+	        echo "    rm -rf $$old"; \
+	        rm -rf -- "$$old" || echo "    WARNING: could not remove $$old — keeping it"; \
+	    done; \
+	fi
+endef
+
 # -----------------------------------------------------------------------------
 # Artifact deployment (called automatically; can also be invoked manually)
 # -----------------------------------------------------------------------------
 
 ## Copy .wic SD card images → deploy/images/BOARD_TS/
-deploy-images: ## Copy .wic artifacts → deploy/images/BOARD_TS/
+deploy-images: ## Copy .wic artifacts → deploy/images/BOARD_TS/; prune older (DEPLOY_KEEP)
 	@src="$(BUILD_DIR)/tmp/deploy/images/$(MACHINE)"; \
 	 out="$(DEPLOY_DIR)/images/$(BOARD)_$(DEPLOY_TS)"; \
 	 test -d "$$src" || { echo "ERROR: No image artifacts at $$src"; exit 1; }; \
@@ -502,10 +573,11 @@ deploy-images: ## Copy .wic artifacts → deploy/images/BOARD_TS/
 	 if [ -n "$$sbom" ]; then cp -L "$$sbom" "$$out/"; echo "  SBOM: $$(basename "$$sbom")"; \
 	 else echo "  WARNING: no SPDX SBOM in $$src (OS-015)"; fi; \
 	 echo "  Done: $$out"; \
-	 $(MAKE) --no-print-directory checksums DEPLOY_DIR=$$out
+	 $(MAKE) --no-print-directory checksums DEPLOY_DIR=$$out && \
+	 $(call deploy-prune,images)
 
 ## Copy cross-toolchain SDK installer → deploy/sdk/BOARD_TS/
-deploy-sdk: ## Copy SDK installer   → deploy/sdk/BOARD_TS/
+deploy-sdk: ## Copy SDK installer   → deploy/sdk/BOARD_TS/; prune older (DEPLOY_KEEP)
 	@src="$(BUILD_DIR)/tmp/deploy/sdk"; \
 	 out="$(DEPLOY_DIR)/sdk/$(BOARD)_$(DEPLOY_TS)"; \
 	 test -d "$$src" || { echo "ERROR: No SDK artifacts at $$src"; exit 1; }; \
@@ -514,10 +586,11 @@ deploy-sdk: ## Copy SDK installer   → deploy/sdk/BOARD_TS/
 	 find "$$src" -maxdepth 1 \( -type f -o -type l \) \
 	     -name '*.sh' ! -name '*-ext-*' \
 	     -exec cp -L {} "$$out/" \;; \
-	 echo "  Done: $$out"
+	 echo "  Done: $$out" && \
+	 $(call deploy-prune,sdk)
 
 ## Copy extensible SDK installer → deploy/esdk/BOARD_TS/
-deploy-esdk: ## Copy eSDK installer  → deploy/esdk/BOARD_TS/
+deploy-esdk: ## Copy eSDK installer  → deploy/esdk/BOARD_TS/; prune older (DEPLOY_KEEP)
 	@src="$(BUILD_DIR)/tmp/deploy/sdk"; \
 	 out="$(DEPLOY_DIR)/esdk/$(BOARD)_$(DEPLOY_TS)"; \
 	 test -d "$$src" || { echo "ERROR: No eSDK artifacts at $$src"; exit 1; }; \
@@ -526,7 +599,8 @@ deploy-esdk: ## Copy eSDK installer  → deploy/esdk/BOARD_TS/
 	 find "$$src" -maxdepth 1 \( -type f -o -type l \) \
 	     -name '*-ext-*.sh' \
 	     -exec cp -L {} "$$out/" \;; \
-	 echo "  Done: $$out"
+	 echo "  Done: $$out" && \
+	 $(call deploy-prune,esdk)
 
 ## Copy .swu OTA package → deploy/swu/BOARD_TS/
 deploy-swu: ## Copy .swu package    → deploy/swu/BOARD_TS/
