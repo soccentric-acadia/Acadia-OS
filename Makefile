@@ -449,19 +449,16 @@ swu: build
 	@$(MAKE) --no-print-directory deploy-swu DEPLOY_TS=$(DEPLOY_TS)
 
 
-## Flash to SD card.  Usage: make flash rpi5 DEVICE=/dev/sdX
+## Flash to SD card.  Usage: make flash rpi5 DEVICE=/dev/sdX  [FORCE=1]
+# All device/image validation, the newest-complete-pair selection, and the
+# destructive-operation confirmation live in scripts/flash-sdcard.sh — see
+# that script for the safety checks it performs.  FORCE=1 skips the
+# interactive confirmation prompt (for scripted/CI use).
 flash:
 ifndef DEVICE
 	$(error DEVICE is not set — example: make flash DEVICE=/dev/sdb)
 endif
-	@test -b "$(DEVICE)" || \
-	    { echo "ERROR: '$(DEVICE)' is not a block device."; exit 1; }
-	$(eval WIC := $(shell find $(BUILD_DIR)/tmp/deploy/images/$(MACHINE) \
-	    -name "*.wic.bz2" 2>/dev/null | sort -V | tail -1))
-	@test -n "$(WIC)" || \
-	    { echo "ERROR: no .wic.bz2 found in $(BUILD_DIR)/tmp/deploy/images/$(MACHINE)"; exit 1; }
-	@echo "Flashing $(WIC) → $(DEVICE)"
-	bmaptool copy --bmap "$(WIC:.bz2=.bmap)" "$(WIC)" "$(DEVICE)"
+	@FORCE=$(FORCE) scripts/flash-sdcard.sh "$(DEVICE)" "$(BUILD_DIR)/tmp/deploy/images/$(MACHINE)"
 
 # -----------------------------------------------------------------------------
 # Artifact deployment (called automatically; can also be invoked manually)
