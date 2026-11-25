@@ -6,7 +6,7 @@ repos:
   # into meta/meta-acadia as a nested clone (same pattern as Zion/Arches).
   # See docs/Acadia/Acadia-OS.md for the layer structure.
   meta-acadia:
-    url: git@github.com:soccentric-acadia/meta-acadia.git
+    url: https://github.com/soccentric-acadia/meta-acadia.git
     branch: develop
     # OS-031: pinned — a build takes exactly this layer revision, never
     # whatever develop happens to be. Bump together with the layer commit.
