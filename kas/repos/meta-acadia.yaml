@@ -10,7 +10,7 @@ repos:
     branch: develop
     # OS-031: pinned — a build takes exactly this layer revision, never
     # whatever develop happens to be. Bump together with the layer commit.
-    commit: 6654fa2575dbc369eba1a655abfe02260ffaa119
+    commit: 0a0a17b29b193e802e4a85d1a1092f2829639372
     path: meta/meta-acadia
     layers:
       .:
