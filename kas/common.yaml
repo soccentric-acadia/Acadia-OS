@@ -97,8 +97,7 @@ local_conf_header:
     DL_DIR     ?= "${TOPDIR}/../cache/downloads"
     SSTATE_DIR ?= "${TOPDIR}/../cache/sstate-cache"
 
-    # SWUpdate: enable built-in Mongoose web server and progress IPC
-    PACKAGECONFIG:append:pn-swupdate = " webserver"
+    # SWUpdate: web server/UI intentionally not enabled
 
     # T-P29 (J03): rsyslog (forward-only config, meta-acadia bbappend) is the
     # system syslog. packagegroup-core-full-cmdline otherwise pulls sysklogd,

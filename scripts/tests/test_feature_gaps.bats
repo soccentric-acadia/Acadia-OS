@@ -76,9 +76,10 @@ setup() {
 
 @test "acadia-image.bb: installs A/B OTA runtime only on rpi5/cm5" {
     IMG="${ROOT}/meta/meta-acadia/recipes-core/images/acadia-image.bb"
-    grep -qF 'IMAGE_INSTALL:append:raspberrypi5 = " swupdate swupdate-www rpi5-swupdate-config"' "${IMG}"
-    grep -qF 'IMAGE_INSTALL:append:raspberrypi-cm5-io-board = " swupdate swupdate-www rpi5-swupdate-config"' "${IMG}"
-    ! grep -qF 'IMAGE_INSTALL:append = " swupdate swupdate-www rpi5-swupdate-config"' "${IMG}"
+    grep -qF 'IMAGE_INSTALL:append:raspberrypi5 = " swupdate swupdate-client rpi5-swupdate-config"' "${IMG}"
+    grep -qF 'IMAGE_INSTALL:append:raspberrypi-cm5-io-board = " swupdate swupdate-client rpi5-swupdate-config"' "${IMG}"
+    ! grep -qF 'IMAGE_INSTALL:append = " swupdate swupdate-client rpi5-swupdate-config"' "${IMG}"
+    ! grep -q "swupdate-www" "${IMG}"
 }
 
 # --- middleware / cloud / debug / ptest wiring (feature.txt §6) -----------
