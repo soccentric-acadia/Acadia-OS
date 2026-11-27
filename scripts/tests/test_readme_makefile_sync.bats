@@ -70,8 +70,8 @@ setup() {
     # are referenced.
     sed -n '/^clean-all:/,/^[^[:space:]]/p' "${SUT_MK}" | grep -qE 'DL_DIR'
     sed -n '/^clean-all:/,/^[^[:space:]]/p' "${SUT_MK}" | grep -qE 'SSTATE_DIR'
-    grep -qE '^DL_DIR[[:space:]]+\?=[[:space:]]+.*cache/downloads' "${SUT_MK}"
-    grep -qE '^SSTATE_DIR[[:space:]]+\?=[[:space:]]+.*cache/sstate-cache' "${SUT_MK}"
+    grep -qE '^DL_DIR[[:space:]]+\?=[[:space:]]+.*CACHE_DIR\)/downloads' "${SUT_MK}"
+    grep -qE '^SSTATE_DIR[[:space:]]+\?=[[:space:]]+.*CACHE_DIR\)/sstate-cache' "${SUT_MK}"
 }
 
 # --- #105: flash target validates DEVICE -----------------------------

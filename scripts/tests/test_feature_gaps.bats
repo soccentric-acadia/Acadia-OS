@@ -102,7 +102,8 @@ setup() {
 
 @test "acadia-image.bb: enables tools-debug and ptest-pkgs IMAGE_FEATURES" {
     IMG="${ROOT}/meta/meta-acadia/recipes-core/images/acadia-image.bb"
-    grep -qF 'IMAGE_FEATURES += "tools-debug"' "${IMG}"
+    # tools-debug is gated behind ACADIA_ENABLE_DEBUG (off for production).
+    grep -qE "IMAGE_FEATURES:append = .*tools-debug.*ACADIA_ENABLE_DEBUG" "${IMG}"
     grep -qF 'IMAGE_FEATURES += "ptest-pkgs"' "${IMG}"
     grep -qF 'gdbserver perf trace-cmd valgrind' "${IMG}"
 }
@@ -114,7 +115,7 @@ setup() {
 }
 
 @test "kas/common.yaml: ptest DISTRO_FEATURES enabled" {
-    grep -qE 'DISTRO_FEATURES:append = " ptest"' "${ROOT}/kas/common.yaml"
+    grep -qE 'DISTRO_FEATURES:append = " ptest( |")' "${ROOT}/kas/common.yaml"
 }
 
 @test "kas/common.yaml: SDKIMAGE_FEATURES includes dev-pkgs and dbg-pkgs" {

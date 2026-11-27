@@ -72,9 +72,9 @@ setup() {
     grep -qF 'lmsensors' "${IMG}"
 }
 
-@test "acadia-services.bb: provides thermal-check, fan-control, rtc-sync, watchdog" {
+@test "acadia-services.bb: provides thermal-check, rtc-sync, watchdog (fan-control retired)" {
     grep -qF 'thermal-check.service' "${SVC}"
-    grep -qF 'fan-control.service' "${SVC}"
+    ! grep -qF 'fan-control' "${SVC}"
     grep -qF 'rtc-sync.service' "${SVC}"
     grep -qF '80-acadia-watchdog.preset' "${SVC}"
     grep -qF 'watchdog.conf' "${SVC}"
